@@ -36,7 +36,7 @@ func main() {
 	fmt.Println("Hash:", string(hash))
 
 	// Register routes
-	route.RegisterRoutes(app, database.DB)
+	route.Routes(app, database.DB)
 
 	// 🔹 Pakai APP_PORT dari .env
 	port := os.Getenv("APP_PORT")

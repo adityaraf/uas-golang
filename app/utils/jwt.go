@@ -5,7 +5,8 @@ import (
 	"os"
 	"time"
 
-	"crud-app/app/model"
+	models "crud-app/app/model"
+
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -14,21 +15,21 @@ var jwtSecret = []byte(func() string {
 		return s
 	}
 	// default (untuk dev). Pastikan di production diganti.
-	return "your-secret-key-min-32-chars-please-change"
+	return "your-secret-key-here"
 }())
 
 type JwtClaims struct {
-	UserID   int    `json:"user_id"`
+	UserID   string `json:"user_id"`
 	Username string `json:"username"`
-	Role     string `json:"role"`
+	RoleID   string `json:"role_id"`
 	jwt.RegisteredClaims
 }
 
-func GenerateToken(user model.User) (string, error) {
+func GenerateToken(user models.User) (string, error) {
 	claims := JwtClaims{
 		UserID:   user.ID,
 		Username: user.Username,
-		Role:     user.Role,
+		RoleID:   user.RoleID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

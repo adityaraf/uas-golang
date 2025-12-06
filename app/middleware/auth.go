@@ -3,7 +3,6 @@ package middleware
 import (
 	"crud-app/app/utils"
 	"strings"
-	"strconv"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -27,7 +26,7 @@ func AuthRequired() fiber.Handler {
 
 		c.Locals("user_id", claims.UserID)
 		c.Locals("username", claims.Username)
-		c.Locals("role", claims.Role)
+		c.Locals("role_id", claims.RoleID)
 
 		return c.Next()
 	}
@@ -35,8 +34,9 @@ func AuthRequired() fiber.Handler {
 
 func AdminOnly() fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		role := c.Locals("role").(string)
-		if role != "admin" {
+		roleID := c.Locals("role_id").(string)
+		// Sesuaikan dengan ID role admin di database Anda
+		if roleID != "1" { // Asumsi role_id admin = 1
 			return c.Status(403).JSON(fiber.Map{"error": "Akses ditolak. Hanya admin yang diizinkan"})
 		}
 		return c.Next()
@@ -45,20 +45,17 @@ func AdminOnly() fiber.Handler {
 
 func UserSelfOrAdmin() fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		userID := c.Locals("user_id").(int)
-		role := c.Locals("role").(string)
-		
+		userID := c.Locals("user_id").(string)
+		roleID := c.Locals("role_id").(string)
+
 		// Get the ID from URL parameter
-		paramID, err := strconv.Atoi(c.Params("id"))
-		if err != nil {
-			return c.Status(400).JSON(fiber.Map{"error": "ID tidak valid"})
-		}
-		
+		paramID := c.Params("id")
+
 		// Allow if user is admin or accessing their own resource
-		if role == "admin" || userID == paramID {
+		if roleID == "1" || userID == paramID { // Asumsi role_id admin = 1
 			return c.Next()
 		}
-		
+
 		return c.Status(403).JSON(fiber.Map{"error": "Akses ditolak. Anda hanya dapat mengakses data sendiri"})
 	}
 }
