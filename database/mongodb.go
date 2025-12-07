@@ -11,9 +11,9 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-var DBmongo *mongo.Client 
+var DBmongo *mongo.Client
 
-func mongoconnection() *mongo.Client {
+func MongoConnection() *mongo.Client {
 	dsn := os.Getenv("MONGO_DSN")
 	if dsn == "" {
 		dsn = "mongodb://localhost:27017/"
@@ -41,25 +41,33 @@ func GetDB() *mongo.Client {
 	return DBmongo
 }
 
+func GetMongoDatabase() *mongo.Database {
+	dbName := os.Getenv("MONGO_DATABASE")
+	if dbName == "" {
+		dbName = "alumni"
+	}
+	return DBmongo.Database(dbName)
+}
+
 func Ping() error {
 	if DBmongo == nil {
 		return fmt.Errorf("database connection is not initialized")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-    
-	return DBmongo.Ping(ctx, nil) 
+
+	return DBmongo.Ping(ctx, nil)
 }
 
 func CloseDB(client *mongo.Client) {
-    if client == nil {
-        return
-    }
-    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	if client == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-    
-    if err := client.Disconnect(ctx); err != nil {
-        log.Fatalf("Gagal menutup koneksi MongoDB: %v", err)
-    }
-    log.Println("Koneksi MongoDB ditutup.")
+
+	if err := client.Disconnect(ctx); err != nil {
+		log.Fatalf("Gagal menutup koneksi MongoDB: %v", err)
+	}
+	log.Println("Koneksi MongoDB ditutup.")
 }

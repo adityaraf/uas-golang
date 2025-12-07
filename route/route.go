@@ -6,11 +6,13 @@ import (
 	"database/sql"
 
 	"github.com/gofiber/fiber/v2"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
-func Routes(app *fiber.App, db *sql.DB) {
+func Routes(app *fiber.App, db *sql.DB, mongoDB *mongo.Database) {
 	// Initialize services
 	authService := service.NewAuthService(db)
+	achievementService := service.NewAchievementService(mongoDB, db)
 
 	// Initialize RBAC middleware
 	rbac := middleware.NewRBACMiddleware(db)
@@ -32,6 +34,16 @@ func Routes(app *fiber.App, db *sql.DB) {
 				"message": "Anda memiliki permission users.read",
 			})
 		})
+
+	// Achievement routes (FR-003: Submit Prestasi, FR-004: Submit untuk Verifikasi)
+	achievements := api.Group("/achievements")
+	achievements.Use(middleware.AuthRequired()) // Require authentication
+	achievements.Post("/", rbac.RequirePermission("achievements.create"), achievementService.SubmitAchievement)
+	achievements.Get("/", rbac.RequirePermission("achievements.read"), achievementService.GetMyAchievements)
+	achievements.Get("/:id", rbac.RequirePermission("achievements.read"), achievementService.GetAchievementByID)
+	achievements.Put("/:id", rbac.RequirePermission("achievements.update"), achievementService.UpdateAchievement)
+	achievements.Delete("/:id", rbac.RequirePermission("achievements.delete"), achievementService.DeleteAchievement)
+	achievements.Post("/:id/submit", rbac.RequirePermission("achievements.submit"), achievementService.SubmitForVerification)
 
 	// Protected routes example (uncomment untuk digunakan)
 	// users := api.Group("/users")

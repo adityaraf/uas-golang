@@ -24,8 +24,14 @@ func main() {
 		log.Fatal("Set environment variable DB_DSN")
 	}
 
+	// Connect to PostgreSQL
 	database.ConnectDB()
 	defer database.DB.Close()
+
+	// Connect to MongoDB
+	mongoClient := database.MongoConnection()
+	defer database.CloseDB(mongoClient)
+	mongoDB := database.GetMongoDatabase()
 
 	// 🔹 Initialize permission cache
 	utils.InitCache()
@@ -42,7 +48,7 @@ func main() {
 	fmt.Println("Hash:", string(hash))
 
 	// Register routes
-	route.Routes(app, database.DB)
+	route.Routes(app, database.DB, mongoDB)
 
 	// 🔹 Pakai APP_PORT dari .env
 	port := os.Getenv("APP_PORT")
