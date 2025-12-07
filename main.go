@@ -1,11 +1,13 @@
 package main
 
 import (
+	"crud-app/app/utils"
 	"crud-app/database"
 	"crud-app/route"
 	"fmt"
 	"log"
 	"os"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/joho/godotenv"
 	"golang.org/x/crypto/bcrypt"
@@ -24,6 +26,10 @@ func main() {
 
 	database.ConnectDB()
 	defer database.DB.Close()
+
+	// 🔹 Initialize permission cache
+	utils.InitCache()
+	log.Println("Permission cache initialized")
 
 	app := fiber.New()
 
