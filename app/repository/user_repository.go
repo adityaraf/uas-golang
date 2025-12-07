@@ -70,3 +70,25 @@ func (r *UserRepository) GetUserProfile(userID string) (*models.UserProfile, err
 
 	return &profile, nil
 }
+
+// FindAdvisorByStudentID mencari dosen wali berdasarkan student_id
+func (r *UserRepository) FindAdvisorByStudentID(studentID string) (string, error) {
+	query := `
+		SELECT advisor_id
+		FROM students
+		WHERE user_id = $1
+		LIMIT 1
+	`
+
+	var advisorID string
+	err := r.db.QueryRow(query, studentID).Scan(&advisorID)
+
+	if err == sql.ErrNoRows {
+		return "", errors.New("student not found or advisor not assigned")
+	}
+	if err != nil {
+		return "", err
+	}
+
+	return advisorID, nil
+}
