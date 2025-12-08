@@ -35,14 +35,14 @@ func (r *AchievementReferenceRepository) Create(ref *models.AchievementReference
 	return err
 }
 
-// FindByID mencari reference berdasarkan ID
+// FindByID mencari reference berdasarkan ID (exclude deleted)
 func (r *AchievementReferenceRepository) FindByID(id string) (*models.AchievementReferences, error) {
 	query := `
 		SELECT id, student_id, mongo_achievement_id, status, 
 		       submitted_at, verified_at, verified_by, rejection_note,
-		       created_at, updated_at
+		       deleted_at, created_at, updated_at
 		FROM achievement_references
-		WHERE id = $1
+		WHERE id = $1 AND deleted_at IS NULL
 	`
 
 	var ref models.AchievementReferences
@@ -55,6 +55,7 @@ func (r *AchievementReferenceRepository) FindByID(id string) (*models.Achievemen
 		&ref.VerifiedAt,
 		&ref.VerifiedBy,
 		&ref.RejectionNote,
+		&ref.DeletedAt,
 		&ref.CreatedAt,
 		&ref.UpdatedAt,
 	)
@@ -69,14 +70,14 @@ func (r *AchievementReferenceRepository) FindByID(id string) (*models.Achievemen
 	return &ref, nil
 }
 
-// FindByMongoID mencari reference berdasarkan mongo_achievement_id
+// FindByMongoID mencari reference berdasarkan mongo_achievement_id (exclude deleted)
 func (r *AchievementReferenceRepository) FindByMongoID(mongoID string) (*models.AchievementReferences, error) {
 	query := `
 		SELECT id, student_id, mongo_achievement_id, status, 
 		       submitted_at, verified_at, verified_by, rejection_note,
-		       created_at, updated_at
+		       deleted_at, created_at, updated_at
 		FROM achievement_references
-		WHERE mongo_achievement_id = $1
+		WHERE mongo_achievement_id = $1 AND deleted_at IS NULL
 	`
 
 	var ref models.AchievementReferences
@@ -89,6 +90,7 @@ func (r *AchievementReferenceRepository) FindByMongoID(mongoID string) (*models.
 		&ref.VerifiedAt,
 		&ref.VerifiedBy,
 		&ref.RejectionNote,
+		&ref.DeletedAt,
 		&ref.CreatedAt,
 		&ref.UpdatedAt,
 	)
@@ -103,14 +105,14 @@ func (r *AchievementReferenceRepository) FindByMongoID(mongoID string) (*models.
 	return &ref, nil
 }
 
-// FindByStudentID mencari semua reference berdasarkan student_id
+// FindByStudentID mencari semua reference berdasarkan student_id (exclude deleted)
 func (r *AchievementReferenceRepository) FindByStudentID(studentID string) ([]models.AchievementReferences, error) {
 	query := `
 		SELECT id, student_id, mongo_achievement_id, status, 
 		       submitted_at, verified_at, verified_by, rejection_note,
-		       created_at, updated_at
+		       deleted_at, created_at, updated_at
 		FROM achievement_references
-		WHERE student_id = $1
+		WHERE student_id = $1 AND deleted_at IS NULL
 		ORDER BY created_at DESC
 	`
 
@@ -132,6 +134,7 @@ func (r *AchievementReferenceRepository) FindByStudentID(studentID string) ([]mo
 			&ref.VerifiedAt,
 			&ref.VerifiedBy,
 			&ref.RejectionNote,
+			&ref.DeletedAt,
 			&ref.CreatedAt,
 			&ref.UpdatedAt,
 		)
@@ -168,9 +171,21 @@ func (r *AchievementReferenceRepository) UpdateSubmittedStatus(mongoID string) e
 	return err
 }
 
-// Delete menghapus reference
+// Delete menghapus reference (hard delete - untuk rollback)
 func (r *AchievementReferenceRepository) Delete(mongoID string) error {
 	query := `DELETE FROM achievement_references WHERE mongo_achievement_id = $1`
 	_, err := r.db.Exec(query, mongoID)
+	return err
+}
+
+// SoftDelete melakukan soft delete reference (FR-005)
+func (r *AchievementReferenceRepository) SoftDelete(mongoID string) error {
+	query := `
+		UPDATE achievement_references
+		SET deleted_at = $1, updated_at = $1
+		WHERE mongo_achievement_id = $2 AND deleted_at IS NULL
+	`
+
+	_, err := r.db.Exec(query, time.Now(), mongoID)
 	return err
 }

@@ -30,10 +30,13 @@ func (r *AchievementRepository) Create(ctx context.Context, achievement *models.
 	return err
 }
 
-// FindByID mencari achievement berdasarkan achievement_id
+// FindByID mencari achievement berdasarkan achievement_id (exclude deleted)
 func (r *AchievementRepository) FindByID(ctx context.Context, achievementID string) (*models.Achievement, error) {
 	var achievement models.Achievement
-	filter := bson.M{"achievement_id": achievementID}
+	filter := bson.M{
+		"achievement_id": achievementID,
+		"is_deleted":     false,
+	}
 
 	err := r.collection.FindOne(ctx, filter).Decode(&achievement)
 	if err != nil {
@@ -43,10 +46,13 @@ func (r *AchievementRepository) FindByID(ctx context.Context, achievementID stri
 	return &achievement, nil
 }
 
-// FindByStudentID mencari semua achievement berdasarkan student_id
+// FindByStudentID mencari semua achievement berdasarkan student_id (exclude deleted)
 func (r *AchievementRepository) FindByStudentID(ctx context.Context, studentID string) ([]models.Achievement, error) {
 	var achievements []models.Achievement
-	filter := bson.M{"student_id": studentID}
+	filter := bson.M{
+		"student_id": studentID,
+		"is_deleted": false,
+	}
 
 	cursor, err := r.collection.Find(ctx, filter)
 	if err != nil {
@@ -85,10 +91,29 @@ func (r *AchievementRepository) UpdateStatus(ctx context.Context, achievementID 
 	return err
 }
 
-// Delete menghapus achievement
+// Delete menghapus achievement (hard delete - untuk rollback)
 func (r *AchievementRepository) Delete(ctx context.Context, achievementID string) error {
 	filter := bson.M{"achievement_id": achievementID}
 	_, err := r.collection.DeleteOne(ctx, filter)
+	return err
+}
+
+// SoftDelete melakukan soft delete achievement (FR-005)
+func (r *AchievementRepository) SoftDelete(ctx context.Context, achievementID string) error {
+	filter := bson.M{
+		"achievement_id": achievementID,
+		"is_deleted":     false,
+	}
+	now := time.Now()
+	update := bson.M{
+		"$set": bson.M{
+			"is_deleted": true,
+			"deleted_at": now,
+			"updated_at": now,
+		},
+	}
+
+	_, err := r.collection.UpdateOne(ctx, filter, update)
 	return err
 }
 

@@ -106,6 +106,8 @@ func (s *AchievementService) SubmitAchievement(c *fiber.Ctx) error {
 		Description:   req.Description,
 		Documents:     documents,
 		Status:        "draft", // Status awal: draft
+		IsDeleted:     false,
+		DeletedAt:     nil,
 		CreatedAt:     time.Now(),
 		UpdatedAt:     time.Now(),
 	}
@@ -299,14 +301,20 @@ func (s *AchievementService) UpdateAchievement(c *fiber.Ctx) error {
 	})
 }
 
-// DeleteAchievement menghapus achievement (hanya jika status masih draft)
+// DeleteAchievement - FR-005: Hapus Prestasi (Soft Delete)
 func (s *AchievementService) DeleteAchievement(c *fiber.Ctx) error {
 	achievementID := c.Params("id")
-	userID, _ := c.Locals("user_id").(string)
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return c.Status(401).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Unauthorized",
+		})
+	}
 
 	ctx := context.Background()
 
-	// Get existing achievement
+	// Step 1: Get existing achievement
 	existing, err := s.achievementRepo.FindByID(ctx, achievementID)
 	if err != nil {
 		return c.Status(404).JSON(fiber.Map{
@@ -323,38 +331,36 @@ func (s *AchievementService) DeleteAchievement(c *fiber.Ctx) error {
 		})
 	}
 
-	// Check status
+	// Precondition: Status harus 'draft'
 	if existing.Status != "draft" {
 		return c.Status(400).JSON(fiber.Map{
 			"status":  "error",
-			"message": "Achievement yang sudah disubmit tidak bisa dihapus",
+			"message": "Hanya prestasi dengan status 'draft' yang bisa dihapus",
 		})
 	}
 
-	// Delete files
-	for _, doc := range existing.Documents {
-		utils.DeleteFile(doc.Filepath)
-	}
-
-	// Delete from MongoDB
-	if err := s.achievementRepo.Delete(ctx, achievementID); err != nil {
+	// Step 2: Soft delete di MongoDB
+	if err := s.achievementRepo.SoftDelete(ctx, achievementID); err != nil {
 		return c.Status(500).JSON(fiber.Map{
 			"status":  "error",
-			"message": "Gagal menghapus achievement dari MongoDB",
+			"message": "Gagal menghapus achievement di MongoDB",
 		})
 	}
 
-	// Delete from PostgreSQL
-	if err := s.referenceRepo.Delete(achievementID); err != nil {
+	// Step 3: Soft delete reference di PostgreSQL
+	if err := s.referenceRepo.SoftDelete(achievementID); err != nil {
+		// Rollback MongoDB (restore from soft delete)
+		// Note: Untuk production, buat fungsi Restore() jika diperlukan
 		return c.Status(500).JSON(fiber.Map{
 			"status":  "error",
-			"message": "Gagal menghapus reference dari PostgreSQL",
+			"message": "Gagal menghapus reference di PostgreSQL",
 		})
 	}
 
+	// Step 4: Return success message
 	return c.Status(200).JSON(fiber.Map{
 		"status":  "success",
-		"message": "Achievement berhasil dihapus",
+		"message": "Prestasi berhasil dihapus",
 	})
 }
 

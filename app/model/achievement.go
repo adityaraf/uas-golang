@@ -18,6 +18,8 @@ type Achievement struct {
 	Description   string             `bson:"description" json:"description"`
 	Documents     []Document         `bson:"documents" json:"documents"`
 	Status        string             `bson:"status" json:"status"`
+	IsDeleted     bool               `bson:"is_deleted" json:"is_deleted"`
+	DeletedAt     *time.Time         `bson:"deleted_at,omitempty" json:"deleted_at,omitempty"`
 	CreatedAt     time.Time          `bson:"created_at" json:"created_at"`
 	UpdatedAt     time.Time          `bson:"updated_at" json:"updated_at"`
 }
