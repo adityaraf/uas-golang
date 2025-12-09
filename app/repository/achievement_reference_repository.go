@@ -3,6 +3,7 @@ package repository
 import (
 	models "crud-app/app/model"
 	"database/sql"
+	"fmt"
 	"time"
 )
 
@@ -188,4 +189,176 @@ func (r *AchievementReferenceRepository) SoftDelete(mongoID string) error {
 
 	_, err := r.db.Exec(query, time.Now(), mongoID)
 	return err
+}
+
+// FindByStudentIDs mencari achievement references berdasarkan multiple student_ids (FR-006)
+func (r *AchievementReferenceRepository) FindByStudentIDs(studentIDs []string, limit, offset int) ([]models.AchievementReferences, int64, error) {
+	if len(studentIDs) == 0 {
+		return []models.AchievementReferences{}, 0, nil
+	}
+
+	// Build placeholders for IN clause
+	placeholders := ""
+	args := make([]interface{}, 0)
+	for i, id := range studentIDs {
+		if i > 0 {
+			placeholders += ", "
+		}
+		placeholders += "$" + fmt.Sprintf("%d", i+1)
+		args = append(args, id)
+	}
+
+	// Count total
+	countQuery := fmt.Sprintf(`
+		SELECT COUNT(*)
+		FROM achievement_references
+		WHERE student_id::text IN (%s) AND deleted_at IS NULL
+	`, placeholders)
+
+	var total int64
+	err := r.db.QueryRow(countQuery, args...).Scan(&total)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Get data with pagination
+	query := fmt.Sprintf(`
+		SELECT id, student_id, mongo_achievement_id, status, 
+		       submitted_at, verified_at, verified_by, rejection_note,
+		       deleted_at, created_at, updated_at
+		FROM achievement_references
+		WHERE student_id::text IN (%s) AND deleted_at IS NULL
+		ORDER BY created_at DESC
+		LIMIT $%d OFFSET $%d
+	`, placeholders, len(studentIDs)+1, len(studentIDs)+2)
+
+	args = append(args, limit, offset)
+	rows, err := r.db.Query(query, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var references []models.AchievementReferences
+	for rows.Next() {
+		var ref models.AchievementReferences
+		err := rows.Scan(
+			&ref.ID,
+			&ref.StudentID,
+			&ref.MongoAchievementID,
+			&ref.Status,
+			&ref.SubmittedAt,
+			&ref.VerifiedAt,
+			&ref.VerifiedBy,
+			&ref.RejectionNote,
+			&ref.DeletedAt,
+			&ref.CreatedAt,
+			&ref.UpdatedAt,
+		)
+		if err != nil {
+			return nil, 0, err
+		}
+		references = append(references, ref)
+	}
+
+	return references, total, nil
+}
+
+// UpdateVerification mengupdate status menjadi verified dan set verified_by, verified_at (FR-007)
+func (r *AchievementReferenceRepository) UpdateVerification(mongoID string, verifiedBy string, status string) error {
+	query := `
+		UPDATE achievement_references
+		SET status = $1, verified_by = $2, verified_at = $3, updated_at = $3
+		WHERE mongo_achievement_id = $4
+	`
+
+	verifiedByUUID, err := parseUUID(verifiedBy)
+	if err != nil {
+		return err
+	}
+
+	_, err = r.db.Exec(query, status, verifiedByUUID, time.Now(), mongoID)
+	return err
+}
+
+// UpdateRejection mengupdate status menjadi rejected dan set rejection_note (FR-007)
+func (r *AchievementReferenceRepository) UpdateRejection(mongoID string, verifiedBy string, rejectionNote string) error {
+	query := `
+		UPDATE achievement_references
+		SET status = 'rejected', verified_by = $1, verified_at = $2, rejection_note = $3, updated_at = $2
+		WHERE mongo_achievement_id = $4
+	`
+
+	verifiedByUUID, err := parseUUID(verifiedBy)
+	if err != nil {
+		return err
+	}
+
+	_, err = r.db.Exec(query, verifiedByUUID, time.Now(), rejectionNote, mongoID)
+	return err
+}
+
+// FindPendingVerification mencari achievement yang perlu diverifikasi (status: submitted) (FR-007)
+func (r *AchievementReferenceRepository) FindPendingVerification(limit, offset int) ([]models.AchievementReferences, int64, error) {
+	// Count total
+	countQuery := `
+		SELECT COUNT(*)
+		FROM achievement_references
+		WHERE status = 'submitted' AND deleted_at IS NULL
+	`
+
+	var total int64
+	err := r.db.QueryRow(countQuery).Scan(&total)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Get data with pagination
+	query := `
+		SELECT id, student_id, mongo_achievement_id, status, 
+		       submitted_at, verified_at, verified_by, rejection_note,
+		       deleted_at, created_at, updated_at
+		FROM achievement_references
+		WHERE status = 'submitted' AND deleted_at IS NULL
+		ORDER BY submitted_at ASC
+		LIMIT $1 OFFSET $2
+	`
+
+	rows, err := r.db.Query(query, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var references []models.AchievementReferences
+	for rows.Next() {
+		var ref models.AchievementReferences
+		err := rows.Scan(
+			&ref.ID,
+			&ref.StudentID,
+			&ref.MongoAchievementID,
+			&ref.Status,
+			&ref.SubmittedAt,
+			&ref.VerifiedAt,
+			&ref.VerifiedBy,
+			&ref.RejectionNote,
+			&ref.DeletedAt,
+			&ref.CreatedAt,
+			&ref.UpdatedAt,
+		)
+		if err != nil {
+			return nil, 0, err
+		}
+		references = append(references, ref)
+	}
+
+	return references, total, nil
+}
+
+// Helper function to parse UUID
+func parseUUID(uuidStr string) (*string, error) {
+	if uuidStr == "" {
+		return nil, nil
+	}
+	return &uuidStr, nil
 }

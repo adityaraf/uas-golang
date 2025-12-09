@@ -57,3 +57,17 @@ type AchievementResponse struct {
 	CreatedAt     time.Time  `json:"created_at"`
 	UpdatedAt     time.Time  `json:"updated_at"`
 }
+
+// PaginationMeta untuk metadata pagination
+type PaginationMeta struct {
+	Page       int   `json:"page"`
+	Limit      int   `json:"limit"`
+	TotalItems int64 `json:"total_items"`
+	TotalPages int   `json:"total_pages"`
+}
+
+// AchievementListResponse untuk response list dengan pagination
+type AchievementListResponse struct {
+	Achievements []Achievement  `json:"achievements"`
+	Pagination   PaginationMeta `json:"pagination"`
+}

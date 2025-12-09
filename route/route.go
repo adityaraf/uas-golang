@@ -35,15 +35,23 @@ func Routes(app *fiber.App, db *sql.DB, mongoDB *mongo.Database) {
 			})
 		})
 
-	// Achievement routes (FR-003: Submit Prestasi, FR-004: Submit untuk Verifikasi)
+	// Achievement routes (FR-003: Submit Prestasi)
 	achievements := api.Group("/achievements")
 	achievements.Use(middleware.AuthRequired()) // Require authentication
+
+	// Student endpoints
 	achievements.Post("/", rbac.RequirePermission("achievements.create"), achievementService.SubmitAchievement)
 	achievements.Get("/", rbac.RequirePermission("achievements.read"), achievementService.GetMyAchievements)
 	achievements.Get("/:id", rbac.RequirePermission("achievements.read"), achievementService.GetAchievementByID)
 	achievements.Put("/:id", rbac.RequirePermission("achievements.update"), achievementService.UpdateAchievement)
 	achievements.Delete("/:id", rbac.RequirePermission("achievements.delete"), achievementService.DeleteAchievement)
-	achievements.Post("/:id/submit", rbac.RequirePermission("achievements.submit"), achievementService.SubmitForVerification)
+	achievements.Post("/:id/submit", rbac.RequirePermission("achievements.create"), achievementService.SubmitForVerification)
+
+	// Lecturer/Admin endpoints (FR-007: Verify Prestasi)
+	achievements.Get("/pending", rbac.RequirePermission("achievements.verify"), achievementService.GetPendingVerification)
+	achievements.Get("/:id/review", rbac.RequirePermission("achievements.verify"), achievementService.ReviewAchievementDetail)
+	achievements.Post("/:id/approve", rbac.RequirePermission("achievements.verify"), achievementService.ApproveAchievement)
+	achievements.Post("/:id/reject", rbac.RequirePermission("achievements.verify"), achievementService.RejectAchievement)
 
 	// Protected routes example (uncomment untuk digunakan)
 	// users := api.Group("/users")

@@ -133,3 +133,24 @@ func (r *AchievementRepository) FindAll(ctx context.Context, filter bson.M) ([]m
 
 	return achievements, nil
 }
+
+// FindByAchievementIDs mencari achievements berdasarkan multiple achievement_ids (FR-006)
+func (r *AchievementRepository) FindByAchievementIDs(ctx context.Context, achievementIDs []string) ([]models.Achievement, error) {
+	var achievements []models.Achievement
+	filter := bson.M{
+		"achievement_id": bson.M{"$in": achievementIDs},
+		"is_deleted":     false,
+	}
+
+	cursor, err := r.collection.Find(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	if err := cursor.All(ctx, &achievements); err != nil {
+		return nil, err
+	}
+
+	return achievements, nil
+}
