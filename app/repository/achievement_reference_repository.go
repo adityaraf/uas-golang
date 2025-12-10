@@ -1,44 +1,44 @@
 package repository
 
 import (
-	models "crud-app/app/model"
-	"database/sql"
-	"fmt"
-	"time"
+models "crud-app/app/model"
+"database/sql"
+"fmt"
+"time"
 )
 
 type AchievementReferenceRepository struct {
-	db *sql.DB
+db *sql.DB
 }
 
 func NewAchievementReferenceRepository(db *sql.DB) *AchievementReferenceRepository {
-	return &AchievementReferenceRepository{db: db}
+return &AchievementReferenceRepository{db: db}
 }
 
 // Create menyimpan reference achievement ke PostgreSQL
 func (r *AchievementReferenceRepository) Create(ref *models.AchievementReferences) error {
-	query := `
+query := `
 		INSERT INTO achievement_references 
 		(id, student_id, mongo_achievement_id, status, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6)
 	`
 
-	_, err := r.db.Exec(
-		query,
-		ref.ID,
-		ref.StudentID,
-		ref.MongoAchievementID,
-		ref.Status,
-		ref.CreatedAt,
-		ref.UpdatedAt,
-	)
+_, err := r.db.Exec(
+query,
+ref.ID,
+ref.StudentID,
+ref.MongoAchievementID,
+ref.Status,
+ref.CreatedAt,
+ref.UpdatedAt,
+)
 
-	return err
+return err
 }
 
 // FindByID mencari reference berdasarkan ID (exclude deleted)
 func (r *AchievementReferenceRepository) FindByID(id string) (*models.AchievementReferences, error) {
-	query := `
+query := `
 		SELECT id, student_id, mongo_achievement_id, status, 
 		       submitted_at, verified_at, verified_by, rejection_note,
 		       deleted_at, created_at, updated_at
@@ -46,34 +46,34 @@ func (r *AchievementReferenceRepository) FindByID(id string) (*models.Achievemen
 		WHERE id = $1 AND deleted_at IS NULL
 	`
 
-	var ref models.AchievementReferences
-	err := r.db.QueryRow(query, id).Scan(
-		&ref.ID,
-		&ref.StudentID,
-		&ref.MongoAchievementID,
-		&ref.Status,
-		&ref.SubmittedAt,
-		&ref.VerifiedAt,
-		&ref.VerifiedBy,
-		&ref.RejectionNote,
-		&ref.DeletedAt,
-		&ref.CreatedAt,
-		&ref.UpdatedAt,
-	)
+var ref models.AchievementReferences
+err := r.db.QueryRow(query, id).Scan(
+&ref.ID,
+&ref.StudentID,
+&ref.MongoAchievementID,
+&ref.Status,
+&ref.SubmittedAt,
+&ref.VerifiedAt,
+&ref.VerifiedBy,
+&ref.RejectionNote,
+&ref.DeletedAt,
+&ref.CreatedAt,
+&ref.UpdatedAt,
+)
 
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
+if err == sql.ErrNoRows {
+return nil, nil
+}
+if err != nil {
+return nil, err
+}
 
-	return &ref, nil
+return &ref, nil
 }
 
 // FindByMongoID mencari reference berdasarkan mongo_achievement_id (exclude deleted)
 func (r *AchievementReferenceRepository) FindByMongoID(mongoID string) (*models.AchievementReferences, error) {
-	query := `
+query := `
 		SELECT id, student_id, mongo_achievement_id, status, 
 		       submitted_at, verified_at, verified_by, rejection_note,
 		       deleted_at, created_at, updated_at
@@ -81,34 +81,34 @@ func (r *AchievementReferenceRepository) FindByMongoID(mongoID string) (*models.
 		WHERE mongo_achievement_id = $1 AND deleted_at IS NULL
 	`
 
-	var ref models.AchievementReferences
-	err := r.db.QueryRow(query, mongoID).Scan(
-		&ref.ID,
-		&ref.StudentID,
-		&ref.MongoAchievementID,
-		&ref.Status,
-		&ref.SubmittedAt,
-		&ref.VerifiedAt,
-		&ref.VerifiedBy,
-		&ref.RejectionNote,
-		&ref.DeletedAt,
-		&ref.CreatedAt,
-		&ref.UpdatedAt,
-	)
+var ref models.AchievementReferences
+err := r.db.QueryRow(query, mongoID).Scan(
+&ref.ID,
+&ref.StudentID,
+&ref.MongoAchievementID,
+&ref.Status,
+&ref.SubmittedAt,
+&ref.VerifiedAt,
+&ref.VerifiedBy,
+&ref.RejectionNote,
+&ref.DeletedAt,
+&ref.CreatedAt,
+&ref.UpdatedAt,
+)
 
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
+if err == sql.ErrNoRows {
+return nil, nil
+}
+if err != nil {
+return nil, err
+}
 
-	return &ref, nil
+return &ref, nil
 }
 
 // FindByStudentID mencari semua reference berdasarkan student_id (exclude deleted)
 func (r *AchievementReferenceRepository) FindByStudentID(studentID string) ([]models.AchievementReferences, error) {
-	query := `
+query := `
 		SELECT id, student_id, mongo_achievement_id, status, 
 		       submitted_at, verified_at, verified_by, rejection_note,
 		       deleted_at, created_at, updated_at
@@ -117,112 +117,112 @@ func (r *AchievementReferenceRepository) FindByStudentID(studentID string) ([]mo
 		ORDER BY created_at DESC
 	`
 
-	rows, err := r.db.Query(query, studentID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
+rows, err := r.db.Query(query, studentID)
+if err != nil {
+return nil, err
+}
+defer rows.Close()
 
-	var references []models.AchievementReferences
-	for rows.Next() {
-		var ref models.AchievementReferences
-		err := rows.Scan(
-			&ref.ID,
-			&ref.StudentID,
-			&ref.MongoAchievementID,
-			&ref.Status,
-			&ref.SubmittedAt,
-			&ref.VerifiedAt,
-			&ref.VerifiedBy,
-			&ref.RejectionNote,
-			&ref.DeletedAt,
-			&ref.CreatedAt,
-			&ref.UpdatedAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-		references = append(references, ref)
-	}
+var references []models.AchievementReferences
+for rows.Next() {
+var ref models.AchievementReferences
+err := rows.Scan(
+&ref.ID,
+&ref.StudentID,
+&ref.MongoAchievementID,
+&ref.Status,
+&ref.SubmittedAt,
+&ref.VerifiedAt,
+&ref.VerifiedBy,
+&ref.RejectionNote,
+&ref.DeletedAt,
+&ref.CreatedAt,
+&ref.UpdatedAt,
+)
+if err != nil {
+return nil, err
+}
+references = append(references, ref)
+}
 
-	return references, nil
+return references, nil
 }
 
 // UpdateStatus mengupdate status reference
 func (r *AchievementReferenceRepository) UpdateStatus(mongoID string, status string) error {
-	query := `
+query := `
 		UPDATE achievement_references
 		SET status = $1, updated_at = $2
 		WHERE mongo_achievement_id = $3
 	`
 
-	_, err := r.db.Exec(query, status, time.Now(), mongoID)
-	return err
+_, err := r.db.Exec(query, status, time.Now(), mongoID)
+return err
 }
 
 // UpdateSubmittedStatus mengupdate status menjadi submitted dan set submitted_at
 func (r *AchievementReferenceRepository) UpdateSubmittedStatus(mongoID string) error {
-	query := `
+query := `
 		UPDATE achievement_references
 		SET status = 'submitted', submitted_at = $1, updated_at = $1
 		WHERE mongo_achievement_id = $2
 	`
 
-	_, err := r.db.Exec(query, time.Now(), mongoID)
-	return err
+_, err := r.db.Exec(query, time.Now(), mongoID)
+return err
 }
 
 // Delete menghapus reference (hard delete - untuk rollback)
 func (r *AchievementReferenceRepository) Delete(mongoID string) error {
-	query := `DELETE FROM achievement_references WHERE mongo_achievement_id = $1`
-	_, err := r.db.Exec(query, mongoID)
-	return err
+query := `DELETE FROM achievement_references WHERE mongo_achievement_id = $1`
+_, err := r.db.Exec(query, mongoID)
+return err
 }
 
 // SoftDelete melakukan soft delete reference (FR-005)
 func (r *AchievementReferenceRepository) SoftDelete(mongoID string) error {
-	query := `
+query := `
 		UPDATE achievement_references
 		SET deleted_at = $1, updated_at = $1
 		WHERE mongo_achievement_id = $2 AND deleted_at IS NULL
 	`
 
-	_, err := r.db.Exec(query, time.Now(), mongoID)
-	return err
+_, err := r.db.Exec(query, time.Now(), mongoID)
+return err
 }
 
 // FindByStudentIDs mencari achievement references berdasarkan multiple student_ids (FR-006)
 func (r *AchievementReferenceRepository) FindByStudentIDs(studentIDs []string, limit, offset int) ([]models.AchievementReferences, int64, error) {
-	if len(studentIDs) == 0 {
-		return []models.AchievementReferences{}, 0, nil
-	}
+if len(studentIDs) == 0 {
+return []models.AchievementReferences{}, 0, nil
+}
 
-	// Build placeholders for IN clause
-	placeholders := ""
-	args := make([]interface{}, 0)
-	for i, id := range studentIDs {
-		if i > 0 {
-			placeholders += ", "
-		}
-		placeholders += "$" + fmt.Sprintf("%d", i+1)
-		args = append(args, id)
-	}
+// Build placeholders for IN clause
+placeholders := ""
+args := make([]interface{}, 0)
+for i, id := range studentIDs {
+if i > 0 {
+placeholders += ", "
+}
+placeholders += "$" + fmt.Sprintf("%d", i+1)
+args = append(args, id)
+}
 
-	// Count total
-	countQuery := fmt.Sprintf(`
+// Count total
+countQuery := fmt.Sprintf(`
 		SELECT COUNT(*)
 		FROM achievement_references
 		WHERE student_id::text IN (%s) AND deleted_at IS NULL
 	`, placeholders)
 
-	var total int64
-	err := r.db.QueryRow(countQuery, args...).Scan(&total)
-	if err != nil {
-		return nil, 0, err
-	}
+var total int64
+err := r.db.QueryRow(countQuery, args...).Scan(&total)
+if err != nil {
+return nil, 0, err
+}
 
-	// Get data with pagination
-	query := fmt.Sprintf(`
+// Get data with pagination
+query := fmt.Sprintf(`
 		SELECT id, student_id, mongo_achievement_id, status, 
 		       submitted_at, verified_at, verified_by, rejection_note,
 		       deleted_at, created_at, updated_at
@@ -232,36 +232,36 @@ func (r *AchievementReferenceRepository) FindByStudentIDs(studentIDs []string, l
 		LIMIT $%d OFFSET $%d
 	`, placeholders, len(studentIDs)+1, len(studentIDs)+2)
 
-	args = append(args, limit, offset)
-	rows, err := r.db.Query(query, args...)
-	if err != nil {
-		return nil, 0, err
-	}
-	defer rows.Close()
+args = append(args, limit, offset)
+rows, err := r.db.Query(query, args...)
+if err != nil {
+return nil, 0, err
+}
+defer rows.Close()
 
-	var references []models.AchievementReferences
-	for rows.Next() {
-		var ref models.AchievementReferences
-		err := rows.Scan(
-			&ref.ID,
-			&ref.StudentID,
-			&ref.MongoAchievementID,
-			&ref.Status,
-			&ref.SubmittedAt,
-			&ref.VerifiedAt,
-			&ref.VerifiedBy,
-			&ref.RejectionNote,
-			&ref.DeletedAt,
-			&ref.CreatedAt,
-			&ref.UpdatedAt,
-		)
-		if err != nil {
-			return nil, 0, err
-		}
-		references = append(references, ref)
-	}
+var references []models.AchievementReferences
+for rows.Next() {
+var ref models.AchievementReferences
+err := rows.Scan(
+&ref.ID,
+&ref.StudentID,
+&ref.MongoAchievementID,
+&ref.Status,
+&ref.SubmittedAt,
+&ref.VerifiedAt,
+&ref.VerifiedBy,
+&ref.RejectionNote,
+&ref.DeletedAt,
+&ref.CreatedAt,
+&ref.UpdatedAt,
+)
+if err != nil {
+return nil, 0, err
+}
+references = append(references, ref)
+}
 
-	return references, total, nil
+return references, total, nil
 }
 
 // UpdateVerification mengupdate status menjadi verified dan set verified_by, verified_at (FR-007)
