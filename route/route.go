@@ -58,3 +58,15 @@ achievements.Delete("/:id", rbac.RequirePermission("achievements.delete"), achie
 
 // Protected routes example (uncomment untuk digunakan)
 // users := api.Group("/users")
+// users.Use(middleware.AuthRequired()) // Require authentication
+// users.Get("/", rbac.RequirePermission("users.read"), getUsersHandler)
+// users.Post("/", rbac.RequirePermission("users.create"), createUserHandler)
+// users.Put("/:id", rbac.RequirePermission("users.update"), updateUserHandler)
+// users.Delete("/:id", rbac.RequirePermission("users.delete"), deleteUserHandler)
+
+// Example: Multiple permissions
+// admin := api.Group("/admin")
+// admin.Use(middleware.AuthRequired())
+// admin.Get("/dashboard", rbac.RequireAnyPermission("admin.dashboard", "superadmin.access"), dashboardHandler)
+// admin.Post("/settings", rbac.RequireAllPermissions("admin.settings.read", "admin.settings.write"), settingsHandler)
+}
