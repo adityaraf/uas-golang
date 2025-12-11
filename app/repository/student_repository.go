@@ -3,92 +3,168 @@ package repository
 import (
 	models "crud-app/app/model"
 	"database/sql"
-	"errors"
 )
 
-type UserRepository struct {
+type StudentRepository struct {
 	db *sql.DB
 }
 
-func NewUserRepository(db *sql.DB) *UserRepository {
-	return &UserRepository{db: db}
+func NewStudentRepository(db *sql.DB) *StudentRepository {
+	return &StudentRepository{db: db}
 }
 
-// FindByUsernameOrEmail mencari user berdasarkan username atau email
-func (r *UserRepository) FindByUsernameOrEmail(identifier string) (*models.User, error) {
+// Create membuat student profile baru
+func (r *StudentRepository) Create(student *models.Student) error {
 	query := `
-		SELECT id, username, email, password_hash, full_name, role_id, is_active, created_at, updated_at
-		FROM users
-		WHERE username = $1 OR email = $1
-		LIMIT 1
+		INSERT INTO students (id, user_id, student_id, program_study, academic_year, advisor_id, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 	`
 
-	var user models.User
-	err := r.db.QueryRow(query, identifier).Scan(
-		&user.ID,
-		&user.Username,
-		&user.Email,
-		&user.PasswordHash,
-		&user.FullName,
-		&user.RoleID,
-		&user.IsActive,
-		&user.CreatedAt,
-		&user.UpdatedAt,
+	_, err := r.db.Exec(
+		query,
+		student.ID,
+		student.UserID,
+		student.StudentID,
+		student.ProgramStudy,
+		student.AcademicYear,
+		student.AdvisorID,
+		student.CreatedAt,
 	)
 
-	if err == sql.ErrNoRows {
-		return nil, errors.New("user not found")
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	return &user, nil
+	return err
 }
 
-// GetUserProfile mengambil profile user dengan role name
-func (r *UserRepository) GetUserProfile(userID string) (*models.UserProfile, error) {
+// FindByUserID mencari student berdasarkan user_id
+func (r *StudentRepository) FindByUserID(userID string) (*models.Student, error) {
 	query := `
-		SELECT u.id, u.username, u.full_name, u.email, r.name as role_name
-		FROM users u
-		LEFT JOIN roles r ON u.role_id = r.id
-		WHERE u.id = $1
-	`
-
-	var profile models.UserProfile
-	err := r.db.QueryRow(query, userID).Scan(
-		&profile.ID,
-		&profile.Username,
-		&profile.FullName,
-		&profile.Email,
-		&profile.RoleName,
-	)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return &profile, nil
-}
-
-// FindAdvisorByStudentID mencari dosen wali berdasarkan student_id
-func (r *UserRepository) FindAdvisorByStudentID(studentID string) (string, error) {
-	query := `
-		SELECT advisor_id
+		SELECT id, user_id, student_id, program_study, academic_year, advisor_id, created_at
 		FROM students
 		WHERE user_id = $1
-		LIMIT 1
 	`
 
-	var advisorID string
-	err := r.db.QueryRow(query, studentID).Scan(&advisorID)
+	var student models.Student
+	err := r.db.QueryRow(query, userID).Scan(
+		&student.ID,
+		&student.UserID,
+		&student.StudentID,
+		&student.ProgramStudy,
+		&student.AcademicYear,
+		&student.AdvisorID,
+		&student.CreatedAt,
+	)
 
 	if err == sql.ErrNoRows {
-		return "", errors.New("student not found or advisor not assigned")
+		return nil, nil
 	}
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	return advisorID, nil
+	return &student, nil
+}
+
+// FindByID mencari student berdasarkan ID
+func (r *StudentRepository) FindByID(id string) (*models.StudentDetail, error) {
+	query := `
+		SELECT s.id, s.user_id, s.student_id, u.full_name, s.program_study, 
+		       s.academic_year, s.advisor_id, 
+		       COALESCE(u2.full_name, '') as advisor_name
+		FROM students s
+		INNER JOIN users u ON s.user_id = u.id
+		LEFT JOIN users u2 ON s.advisor_id = u2.id
+		WHERE s.id = $1
+	`
+
+	var student models.StudentDetail
+	err := r.db.QueryRow(query, id).Scan(
+		&student.ID,
+		&student.UserID,
+		&student.StudentID,
+		&student.FullName,
+		&student.ProgramStudy,
+		&student.AcademicYear,
+		&student.AdvisorID,
+		&student.AdvisorName,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return &student, nil
+}
+
+// Update mengupdate student profile
+func (r *StudentRepository) Update(id string, student *models.Student) error {
+	query := `
+		UPDATE students
+		SET student_id = $1, program_study = $2, academic_year = $3, advisor_id = $4
+		WHERE id = $5
+	`
+
+	_, err := r.db.Exec(
+		query,
+		student.StudentID,
+		student.ProgramStudy,
+		student.AcademicYear,
+		student.AdvisorID,
+		id,
+	)
+
+	return err
+}
+
+// AssignAdvisor mengassign advisor ke student
+func (r *StudentRepository) AssignAdvisor(studentID string, advisorID string) error {
+	query := `
+		UPDATE students
+		SET advisor_id = $1
+		WHERE id = $2
+	`
+
+	_, err := r.db.Exec(query, advisorID, studentID)
+	return err
+}
+
+// FindStudentIDsByAdvisorID mencari student IDs berdasarkan advisor_id
+func (r *StudentRepository) FindStudentIDsByAdvisorID(advisorID string) ([]string, error) {
+	query := `
+		SELECT user_id
+		FROM students
+		WHERE advisor_id = $1
+	`
+
+	rows, err := r.db.Query(query, advisorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var studentIDs []string
+	for rows.Next() {
+		var userID string
+		if err := rows.Scan(&userID); err != nil {
+			return nil, err
+		}
+		studentIDs = append(studentIDs, userID)
+	}
+
+	return studentIDs, nil
+}
+
+// Delete menghapus student profile
+func (r *StudentRepository) Delete(id string) error {
+	query := `DELETE FROM students WHERE id = $1`
+	_, err := r.db.Exec(query, id)
+	return err
+}
+
+// DeleteByUserID menghapus student profile berdasarkan user_id
+func (r *StudentRepository) DeleteByUserID(userID string) error {
+	query := `DELETE FROM students WHERE user_id = $1`
+	_, err := r.db.Exec(query, userID)
+	return err
 }

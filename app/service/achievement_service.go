@@ -551,204 +551,316 @@ return c.Status(200).JSON(fiber.Map{
 
 // GetPendingVerification - FR-007: Get list achievement yang perlu diverifikasi
 func (s *AchievementService) GetPendingVerification(c *fiber.Ctx) error {
-	// Get pagination params
-	page := c.QueryInt("page", 1)
-	limit := c.QueryInt("limit", 10)
-	offset := (page - 1) * limit
+// Get pagination params
+page := c.QueryInt("page", 1)
+limit := c.QueryInt("limit", 10)
+offset := (page - 1) * limit
 
-	// Get pending achievements dari PostgreSQL
-	references, total, err := s.referenceRepo.FindPendingVerification(limit, offset)
-	if err != nil {
-		return c.Status(500).JSON(fiber.Map{
-			"status":  "error",
-			"message": "Gagal mengambil data pending verification",
-		})
-	}
+// Get pending achievements dari PostgreSQL
+references, total, err := s.referenceRepo.FindPendingVerification(limit, offset)
+if err != nil {
+return c.Status(500).JSON(fiber.Map{
+"status":  "error",
+"message": "Gagal mengambil data pending verification",
+})
+}
 
-	// Get full data dari MongoDB
-	ctx := context.Background()
-	var achievements []models.Achievement
+// Get full data dari MongoDB
+ctx := context.Background()
+var achievements []models.Achievement
 
-	for _, ref := range references {
-		achievement, err := s.achievementRepo.FindByID(ctx, ref.MongoAchievementID)
-		if err == nil && achievement != nil {
-			achievements = append(achievements, *achievement)
-		}
-	}
+for _, ref := range references {
+achievement, err := s.achievementRepo.FindByID(ctx, ref.MongoAchievementID)
+if err == nil && achievement != nil {
+achievements = append(achievements, *achievement)
+}
+}
 
-	return c.Status(200).JSON(fiber.Map{
-		"status":  "success",
-		"message": "Data pending verification berhasil diambil",
-		"data": fiber.Map{
-			"achievements": achievements,
-			"pagination": fiber.Map{
-				"page":       page,
-				"limit":      limit,
-				"total":      total,
-				"total_page": (total + int64(limit) - 1) / int64(limit),
-			},
-		},
-	})
+return c.Status(200).JSON(fiber.Map{
+"status":  "success",
+"message": "Data pending verification berhasil diambil",
+"data": fiber.Map{
+"achievements": achievements,
+"pagination": fiber.Map{
+"page":       page,
+"limit":      limit,
+"total":      total,
+"total_page": (total + int64(limit) - 1) / int64(limit),
+},
+},
+})
 }
 
 // ReviewAchievementDetail - FR-007: Dosen review detail prestasi
 func (s *AchievementService) ReviewAchievementDetail(c *fiber.Ctx) error {
-	achievementID := c.Params("id")
+achievementID := c.Params("id")
 
-	ctx := context.Background()
-	achievement, err := s.achievementRepo.FindByID(ctx, achievementID)
-	if err != nil {
-		return c.Status(404).JSON(fiber.Map{
-			"status":  "error",
-			"message": "Achievement tidak ditemukan",
-		})
-	}
+ctx := context.Background()
+achievement, err := s.achievementRepo.FindByID(ctx, achievementID)
+if err != nil {
+return c.Status(404).JSON(fiber.Map{
+"status":  "error",
+"message": "Achievement tidak ditemukan",
+})
+}
 
-	// Get reference data untuk info tambahan
-	reference, err := s.referenceRepo.FindByMongoID(achievementID)
-	if err != nil {
-		return c.Status(500).JSON(fiber.Map{
-			"status":  "error",
-			"message": "Gagal mengambil reference data",
-		})
-	}
+// Get reference data untuk info tambahan
+reference, err := s.referenceRepo.FindByMongoID(achievementID)
+if err != nil {
+return c.Status(500).JSON(fiber.Map{
+"status":  "error",
+"message": "Gagal mengambil reference data",
+})
+}
 
-	return c.Status(200).JSON(fiber.Map{
-		"status":  "success",
-		"message": "Data achievement berhasil diambil",
-		"data": fiber.Map{
-			"achievement": achievement,
-			"reference":   reference,
-		},
-	})
+return c.Status(200).JSON(fiber.Map{
+"status":  "success",
+"message": "Data achievement berhasil diambil",
+"data": fiber.Map{
+"achievement": achievement,
+"reference":   reference,
+},
+})
 }
 
 // ApproveAchievement - FR-007: Dosen approve prestasi
 func (s *AchievementService) ApproveAchievement(c *fiber.Ctx) error {
-	achievementID := c.Params("id")
-	userID, _ := c.Locals("user_id").(string)
+achievementID := c.Params("id")
+userID, _ := c.Locals("user_id").(string)
 
-	ctx := context.Background()
+ctx := context.Background()
 
-	// Get existing achievement
-	existing, err := s.achievementRepo.FindByID(ctx, achievementID)
-	if err != nil {
-		return c.Status(404).JSON(fiber.Map{
-			"status":  "error",
-			"message": "Achievement tidak ditemukan",
-		})
-	}
+// Get existing achievement
+existing, err := s.achievementRepo.FindByID(ctx, achievementID)
+if err != nil {
+return c.Status(404).JSON(fiber.Map{
+"status":  "error",
+"message": "Achievement tidak ditemukan",
+})
+}
 
-	// Check status (hanya bisa approve jika status submitted)
-	if existing.Status != "submitted" {
-		return c.Status(400).JSON(fiber.Map{
-			"status":  "error",
-			"message": "Hanya achievement dengan status 'submitted' yang bisa diapprove",
-		})
-	}
+// Check status (hanya bisa approve jika status submitted)
+if existing.Status != "submitted" {
+return c.Status(400).JSON(fiber.Map{
+"status":  "error",
+"message": "Hanya achievement dengan status 'submitted' yang bisa diapprove",
+})
+}
 
-	// Update status di MongoDB
-	if err := s.achievementRepo.UpdateStatus(ctx, achievementID, "verified"); err != nil {
-		return c.Status(500).JSON(fiber.Map{
-			"status":  "error",
-			"message": "Gagal mengupdate status di MongoDB",
-		})
-	}
+// Update status di MongoDB
+if err := s.achievementRepo.UpdateStatus(ctx, achievementID, "verified"); err != nil {
+return c.Status(500).JSON(fiber.Map{
+"status":  "error",
+"message": "Gagal mengupdate status di MongoDB",
+})
+}
 
-	// Update verification di PostgreSQL
-	if err := s.referenceRepo.UpdateVerification(achievementID, userID, "verified"); err != nil {
-		// Rollback MongoDB
-		s.achievementRepo.UpdateStatus(ctx, achievementID, "submitted")
-		return c.Status(500).JSON(fiber.Map{
-			"status":  "error",
-			"message": "Gagal mengupdate verification di PostgreSQL",
-		})
-	}
+// Update verification di PostgreSQL
+if err := s.referenceRepo.UpdateVerification(achievementID, userID, "verified"); err != nil {
+// Rollback MongoDB
+s.achievementRepo.UpdateStatus(ctx, achievementID, "submitted")
+return c.Status(500).JSON(fiber.Map{
+"status":  "error",
+"message": "Gagal mengupdate verification di PostgreSQL",
+})
+}
 
-	// Get updated data
-	updated, _ := s.achievementRepo.FindByID(ctx, achievementID)
-	reference, _ := s.referenceRepo.FindByMongoID(achievementID)
+// Get updated data
+updated, _ := s.achievementRepo.FindByID(ctx, achievementID)
+reference, _ := s.referenceRepo.FindByMongoID(achievementID)
 
-	return c.Status(200).JSON(fiber.Map{
-		"status":  "success",
-		"message": "Achievement berhasil diverifikasi",
-		"data": fiber.Map{
-			"achievement": updated,
-			"reference":   reference,
-		},
-	})
+return c.Status(200).JSON(fiber.Map{
+"status":  "success",
+"message": "Achievement berhasil diverifikasi",
+"data": fiber.Map{
+"achievement": updated,
+"reference":   reference,
+},
+})
 }
 
 // RejectAchievement - FR-007: Dosen reject prestasi
 func (s *AchievementService) RejectAchievement(c *fiber.Ctx) error {
-	achievementID := c.Params("id")
-	userID, _ := c.Locals("user_id").(string)
+achievementID := c.Params("id")
+userID, _ := c.Locals("user_id").(string)
 
-	// Parse request body untuk rejection note
-	var req struct {
-		RejectionNote string `json:"rejection_note"`
+// Parse request body untuk rejection note
+var req struct {
+RejectionNote string `json:"rejection_note"`
+}
+if err := c.BodyParser(&req); err != nil {
+return c.Status(400).JSON(fiber.Map{
+"status":  "error",
+"message": "Invalid request body",
+})
+}
+
+if req.RejectionNote == "" {
+return c.Status(400).JSON(fiber.Map{
+"status":  "error",
+"message": "Rejection note harus diisi",
+})
+}
+
+ctx := context.Background()
+
+// Get existing achievement
+existing, err := s.achievementRepo.FindByID(ctx, achievementID)
+if err != nil {
+return c.Status(404).JSON(fiber.Map{
+"status":  "error",
+"message": "Achievement tidak ditemukan",
+})
+}
+
+// Check status (hanya bisa reject jika status submitted)
+if existing.Status != "submitted" {
+return c.Status(400).JSON(fiber.Map{
+"status":  "error",
+"message": "Hanya achievement dengan status 'submitted' yang bisa direject",
+})
+}
+
+// Update status di MongoDB
+if err := s.achievementRepo.UpdateStatus(ctx, achievementID, "rejected"); err != nil {
+return c.Status(500).JSON(fiber.Map{
+"status":  "error",
+"message": "Gagal mengupdate status di MongoDB",
+})
+}
+
+// Update rejection di PostgreSQL
+if err := s.referenceRepo.UpdateRejection(achievementID, userID, req.RejectionNote); err != nil {
+// Rollback MongoDB
+s.achievementRepo.UpdateStatus(ctx, achievementID, "submitted")
+return c.Status(500).JSON(fiber.Map{
+"status":  "error",
+"message": "Gagal mengupdate rejection di PostgreSQL",
+})
+}
+
+// Get updated data
+updated, _ := s.achievementRepo.FindByID(ctx, achievementID)
+reference, _ := s.referenceRepo.FindByMongoID(achievementID)
+
+return c.Status(200).JSON(fiber.Map{
+"status":  "success",
+"message": "Achievement berhasil direject",
+"data": fiber.Map{
+"achievement": updated,
+"reference":   reference,
+},
+})
+}
+
+// GetAllAchievements - FR-010: Admin view all achievements
+func (s *AchievementService) GetAllAchievements(c *fiber.Ctx) error {
+	// Parse query parameters
+	page := c.QueryInt("page", 1)
+	limit := c.QueryInt("limit", 10)
+	statusFilter := c.Query("status", "")
+	studentIDFilter := c.Query("student_id", "")
+	sortBy := c.Query("sort_by", "created_at")
+	sortOrder := c.Query("sort_order", "desc")
+
+	// Validation
+	if page < 1 {
+		page = 1
 	}
-	if err := c.BodyParser(&req); err != nil {
-		return c.Status(400).JSON(fiber.Map{
-			"status":  "error",
-			"message": "Invalid request body",
-		})
+	if limit < 1 || limit > 100 {
+		limit = 10
+	}
+	offset := (page - 1) * limit
+
+	// Validate status filter
+	if statusFilter != "" {
+		validStatuses := map[string]bool{
+			"draft":     true,
+			"submitted": true,
+			"verified":  true,
+			"rejected":  true,
+		}
+		if !validStatuses[statusFilter] {
+			return c.Status(400).JSON(fiber.Map{
+				"status":  "error",
+				"message": "Invalid status filter. Valid values: draft, submitted, verified, rejected",
+			})
+		}
 	}
 
-	if req.RejectionNote == "" {
-		return c.Status(400).JSON(fiber.Map{
-			"status":  "error",
-			"message": "Rejection note harus diisi",
-		})
-	}
-
-	ctx := context.Background()
-
-	// Get existing achievement
-	existing, err := s.achievementRepo.FindByID(ctx, achievementID)
+	// Step 1: Get achievement references dari PostgreSQL dengan filter
+	references, total, err := s.referenceRepo.FindAllWithFilters(
+		limit,
+		offset,
+		statusFilter,
+		studentIDFilter,
+		sortBy,
+		sortOrder,
+	)
 	if err != nil {
-		return c.Status(404).JSON(fiber.Map{
-			"status":  "error",
-			"message": "Achievement tidak ditemukan",
-		})
-	}
-
-	// Check status (hanya bisa reject jika status submitted)
-	if existing.Status != "submitted" {
-		return c.Status(400).JSON(fiber.Map{
-			"status":  "error",
-			"message": "Hanya achievement dengan status 'submitted' yang bisa direject",
-		})
-	}
-
-	// Update status di MongoDB
-	if err := s.achievementRepo.UpdateStatus(ctx, achievementID, "rejected"); err != nil {
 		return c.Status(500).JSON(fiber.Map{
 			"status":  "error",
-			"message": "Gagal mengupdate status di MongoDB",
+			"message": "Gagal mengambil data achievement references",
 		})
 	}
 
-	// Update rejection di PostgreSQL
-	if err := s.referenceRepo.UpdateRejection(achievementID, userID, req.RejectionNote); err != nil {
-		// Rollback MongoDB
-		s.achievementRepo.UpdateStatus(ctx, achievementID, "submitted")
+	// Check if no data
+	if len(references) == 0 {
+		return c.Status(200).JSON(fiber.Map{
+			"status":  "success",
+			"message": "Data achievements berhasil diambil",
+			"data": fiber.Map{
+				"achievements": []models.Achievement{},
+				"pagination": fiber.Map{
+					"page":        page,
+					"limit":       limit,
+					"total_items": total,
+					"total_pages": 0,
+				},
+			},
+		})
+	}
+
+	// Step 2: Extract achievement IDs untuk fetch dari MongoDB
+	achievementIDs := make([]string, len(references))
+	for i, ref := range references {
+		achievementIDs[i] = ref.MongoAchievementID
+	}
+
+	// Step 3: Fetch details dari MongoDB
+	ctx := context.Background()
+	achievements, err := s.achievementRepo.FindByAchievementIDs(ctx, achievementIDs)
+	if err != nil {
 		return c.Status(500).JSON(fiber.Map{
 			"status":  "error",
-			"message": "Gagal mengupdate rejection di PostgreSQL",
+			"message": "Gagal mengambil detail achievements dari MongoDB",
 		})
 	}
 
-	// Get updated data
-	updated, _ := s.achievementRepo.FindByID(ctx, achievementID)
-	reference, _ := s.referenceRepo.FindByMongoID(achievementID)
+	// Calculate total pages
+	totalPages := int(total) / limit
+	if int(total)%limit > 0 {
+		totalPages++
+	}
 
+	// Step 4: Return dengan pagination
 	return c.Status(200).JSON(fiber.Map{
 		"status":  "success",
-		"message": "Achievement berhasil direject",
+		"message": "Data achievements berhasil diambil",
 		"data": fiber.Map{
-			"achievement": updated,
-			"reference":   reference,
+			"achievements": achievements,
+			"pagination": fiber.Map{
+				"page":        page,
+				"limit":       limit,
+				"total_items": total,
+				"total_pages": totalPages,
+			},
+			"filters": fiber.Map{
+				"status":     statusFilter,
+				"student_id": studentIDFilter,
+				"sort_by":    sortBy,
+				"sort_order": sortOrder,
+			},
 		},
 	})
 }
