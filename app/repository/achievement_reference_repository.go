@@ -365,60 +365,60 @@ return &uuidStr, nil
 
 // FindAllWithFilters mencari semua achievement references dengan filter dan sorting (FR-010)
 func (r *AchievementReferenceRepository) FindAllWithFilters(
-	limit, offset int,
-	statusFilter, studentIDFilter string,
-	sortBy, sortOrder string,
+limit, offset int,
+statusFilter, studentIDFilter string,
+sortBy, sortOrder string,
 ) ([]models.AchievementReferences, int64, error) {
-	// Build WHERE clause
-	whereClause := "WHERE deleted_at IS NULL"
-	args := []interface{}{}
-	argIndex := 1
+// Build WHERE clause
+whereClause := "WHERE deleted_at IS NULL"
+args := []interface{}{}
+argIndex := 1
 
-	if statusFilter != "" {
-		whereClause += fmt.Sprintf(" AND status = $%d", argIndex)
-		args = append(args, statusFilter)
-		argIndex++
-	}
+if statusFilter != "" {
+whereClause += fmt.Sprintf(" AND status = $%d", argIndex)
+args = append(args, statusFilter)
+argIndex++
+}
 
-	if studentIDFilter != "" {
-		whereClause += fmt.Sprintf(" AND student_id::text = $%d", argIndex)
-		args = append(args, studentIDFilter)
-		argIndex++
-	}
+if studentIDFilter != "" {
+whereClause += fmt.Sprintf(" AND student_id::text = $%d", argIndex)
+args = append(args, studentIDFilter)
+argIndex++
+}
 
-	// Count total
-	countQuery := fmt.Sprintf(`
+// Count total
+countQuery := fmt.Sprintf(`
 		SELECT COUNT(*)
 		FROM achievement_references
 		%s
 	`, whereClause)
 
-	var total int64
-	err := r.db.QueryRow(countQuery, args...).Scan(&total)
-	if err != nil {
-		return nil, 0, err
-	}
+var total int64
+err := r.db.QueryRow(countQuery, args...).Scan(&total)
+if err != nil {
+return nil, 0, err
+}
 
-	// Build ORDER BY clause
-	orderByClause := "ORDER BY created_at DESC" // default
-	if sortBy != "" {
-		validSortFields := map[string]bool{
-			"created_at":   true,
-			"submitted_at": true,
-			"verified_at":  true,
-			"updated_at":   true,
-		}
-		if validSortFields[sortBy] {
-			order := "DESC"
-			if sortOrder == "asc" {
-				order = "ASC"
-			}
-			orderByClause = fmt.Sprintf("ORDER BY %s %s", sortBy, order)
-		}
-	}
+// Build ORDER BY clause
+orderByClause := "ORDER BY created_at DESC" // default
+if sortBy != "" {
+validSortFields := map[string]bool{
+"created_at":   true,
+"submitted_at": true,
+"verified_at":  true,
+"updated_at":   true,
+}
+if validSortFields[sortBy] {
+order := "DESC"
+if sortOrder == "asc" {
+order = "ASC"
+}
+orderByClause = fmt.Sprintf("ORDER BY %s %s", sortBy, order)
+}
+}
 
-	// Get data with pagination
-	query := fmt.Sprintf(`
+// Get data with pagination
+query := fmt.Sprintf(`
 		SELECT id, student_id, mongo_achievement_id, status, 
 		       submitted_at, verified_at, verified_by, rejection_note,
 		       deleted_at, created_at, updated_at
@@ -428,34 +428,130 @@ func (r *AchievementReferenceRepository) FindAllWithFilters(
 		LIMIT $%d OFFSET $%d
 	`, whereClause, orderByClause, argIndex, argIndex+1)
 
-	args = append(args, limit, offset)
+args = append(args, limit, offset)
+rows, err := r.db.Query(query, args...)
+if err != nil {
+return nil, 0, err
+}
+defer rows.Close()
+
+var references []models.AchievementReferences
+for rows.Next() {
+var ref models.AchievementReferences
+err := rows.Scan(
+&ref.ID,
+&ref.StudentID,
+&ref.MongoAchievementID,
+&ref.Status,
+&ref.SubmittedAt,
+&ref.VerifiedAt,
+&ref.VerifiedBy,
+&ref.RejectionNote,
+&ref.DeletedAt,
+&ref.CreatedAt,
+&ref.UpdatedAt,
+)
+if err != nil {
+return nil, 0, err
+}
+references = append(references, ref)
+}
+
+return references, total, nil
+}
+
+// GetTopStudents mencari top students berdasarkan jumlah achievement (FR-011)
+func (r *AchievementReferenceRepository) GetTopStudents(studentIDs []string, limit int) ([]models.TopStudent, error) {
+	if len(studentIDs) == 0 {
+		return []models.TopStudent{}, nil
+	}
+
+	// Build placeholders for IN clause
+	placeholders := ""
+	args := make([]interface{}, 0)
+	for i, id := range studentIDs {
+		if i > 0 {
+			placeholders += ", "
+		}
+		placeholders += "$" + fmt.Sprintf("%d", i+1)
+		args = append(args, id)
+	}
+
+	query := fmt.Sprintf(`
+		SELECT 
+			ar.student_id,
+			u.full_name as student_name,
+			COUNT(*) as total_achievements,
+			COUNT(CASE WHEN ar.status = 'verified' THEN 1 END) as verified_achievements
+		FROM achievement_references ar
+		INNER JOIN users u ON ar.student_id::text = u.id
+		WHERE ar.student_id::text IN (%s) AND ar.deleted_at IS NULL
+		GROUP BY ar.student_id, u.full_name
+		ORDER BY total_achievements DESC, verified_achievements DESC
+		LIMIT $%d
+	`, placeholders, len(studentIDs)+1)
+
+	args = append(args, limit)
 	rows, err := r.db.Query(query, args...)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 	defer rows.Close()
 
-	var references []models.AchievementReferences
+	var topStudents []models.TopStudent
 	for rows.Next() {
-		var ref models.AchievementReferences
+		var student models.TopStudent
 		err := rows.Scan(
-			&ref.ID,
-			&ref.StudentID,
-			&ref.MongoAchievementID,
-			&ref.Status,
-			&ref.SubmittedAt,
-			&ref.VerifiedAt,
-			&ref.VerifiedBy,
-			&ref.RejectionNote,
-			&ref.DeletedAt,
-			&ref.CreatedAt,
-			&ref.UpdatedAt,
+			&student.StudentID,
+			&student.StudentName,
+			&student.TotalAchievements,
+			&student.VerifiedAchievements,
 		)
 		if err != nil {
-			return nil, 0, err
+			return nil, err
 		}
-		references = append(references, ref)
+		topStudents = append(topStudents, student)
 	}
 
-	return references, total, nil
+	return topStudents, nil
+}
+
+// GetAllTopStudents mencari top students dari semua data (FR-011)
+func (r *AchievementReferenceRepository) GetAllTopStudents(limit int) ([]models.TopStudent, error) {
+	query := `
+		SELECT 
+			ar.student_id,
+			u.full_name as student_name,
+			COUNT(*) as total_achievements,
+			COUNT(CASE WHEN ar.status = 'verified' THEN 1 END) as verified_achievements
+		FROM achievement_references ar
+		INNER JOIN users u ON ar.student_id::text = u.id
+		WHERE ar.deleted_at IS NULL
+		GROUP BY ar.student_id, u.full_name
+		ORDER BY total_achievements DESC, verified_achievements DESC
+		LIMIT $1
+	`
+
+	rows, err := r.db.Query(query, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var topStudents []models.TopStudent
+	for rows.Next() {
+		var student models.TopStudent
+		err := rows.Scan(
+			&student.StudentID,
+			&student.StudentName,
+			&student.TotalAchievements,
+			&student.VerifiedAchievements,
+		)
+		if err != nil {
+			return nil, err
+		}
+		topStudents = append(topStudents, student)
+	}
+
+	return topStudents, nil
 }

@@ -11,6 +11,7 @@ models "crud-app/app/model"
 
 "github.com/gofiber/fiber/v2"
 "github.com/google/uuid"
+	"go.mongodb.org/mongo-driver/bson"
 "go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -755,112 +756,665 @@ return c.Status(200).JSON(fiber.Map{
 
 // GetAllAchievements - FR-010: Admin view all achievements
 func (s *AchievementService) GetAllAchievements(c *fiber.Ctx) error {
-	// Parse query parameters
-	page := c.QueryInt("page", 1)
-	limit := c.QueryInt("limit", 10)
-	statusFilter := c.Query("status", "")
-	studentIDFilter := c.Query("student_id", "")
-	sortBy := c.Query("sort_by", "created_at")
-	sortOrder := c.Query("sort_order", "desc")
+// Parse query parameters
+page := c.QueryInt("page", 1)
+limit := c.QueryInt("limit", 10)
+statusFilter := c.Query("status", "")
+studentIDFilter := c.Query("student_id", "")
+sortBy := c.Query("sort_by", "created_at")
+sortOrder := c.Query("sort_order", "desc")
 
-	// Validation
-	if page < 1 {
-		page = 1
-	}
-	if limit < 1 || limit > 100 {
-		limit = 10
-	}
-	offset := (page - 1) * limit
+// Validation
+if page < 1 {
+page = 1
+}
+if limit < 1 || limit > 100 {
+limit = 10
+}
+offset := (page - 1) * limit
 
-	// Validate status filter
-	if statusFilter != "" {
-		validStatuses := map[string]bool{
-			"draft":     true,
-			"submitted": true,
-			"verified":  true,
-			"rejected":  true,
-		}
-		if !validStatuses[statusFilter] {
-			return c.Status(400).JSON(fiber.Map{
-				"status":  "error",
-				"message": "Invalid status filter. Valid values: draft, submitted, verified, rejected",
-			})
-		}
-	}
+// Validate status filter
+if statusFilter != "" {
+validStatuses := map[string]bool{
+"draft":     true,
+"submitted": true,
+"verified":  true,
+"rejected":  true,
+}
+if !validStatuses[statusFilter] {
+return c.Status(400).JSON(fiber.Map{
+"status":  "error",
+"message": "Invalid status filter. Valid values: draft, submitted, verified, rejected",
+})
+}
+}
 
-	// Step 1: Get achievement references dari PostgreSQL dengan filter
-	references, total, err := s.referenceRepo.FindAllWithFilters(
-		limit,
-		offset,
-		statusFilter,
-		studentIDFilter,
-		sortBy,
-		sortOrder,
-	)
-	if err != nil {
-		return c.Status(500).JSON(fiber.Map{
+// Step 1: Get achievement references dari PostgreSQL dengan filter
+references, total, err := s.referenceRepo.FindAllWithFilters(
+limit,
+offset,
+statusFilter,
+studentIDFilter,
+sortBy,
+sortOrder,
+)
+if err != nil {
+return c.Status(500).JSON(fiber.Map{
+"status":  "error",
+"message": "Gagal mengambil data achievement references",
+})
+}
+
+// Check if no data
+if len(references) == 0 {
+return c.Status(200).JSON(fiber.Map{
+"status":  "success",
+"message": "Data achievements berhasil diambil",
+"data": fiber.Map{
+"achievements": []models.Achievement{},
+"pagination": fiber.Map{
+"page":        page,
+"limit":       limit,
+"total_items": total,
+"total_pages": 0,
+},
+},
+})
+}
+
+// Step 2: Extract achievement IDs untuk fetch dari MongoDB
+achievementIDs := make([]string, len(references))
+for i, ref := range references {
+achievementIDs[i] = ref.MongoAchievementID
+}
+
+// Step 3: Fetch details dari MongoDB
+ctx := context.Background()
+achievements, err := s.achievementRepo.FindByAchievementIDs(ctx, achievementIDs)
+if err != nil {
+return c.Status(500).JSON(fiber.Map{
+"status":  "error",
+"message": "Gagal mengambil detail achievements dari MongoDB",
+})
+}
+
+// Calculate total pages
+totalPages := int(total) / limit
+if int(total)%limit > 0 {
+totalPages++
+}
+
+// Step 4: Return dengan pagination
+return c.Status(200).JSON(fiber.Map{
+"status":  "success",
+"message": "Data achievements berhasil diambil",
+"data": fiber.Map{
+"achievements": achievements,
+"pagination": fiber.Map{
+"page":        page,
+"limit":       limit,
+"total_items": total,
+"total_pages": totalPages,
+},
+"filters": fiber.Map{
+"status":     statusFilter,
+"student_id": studentIDFilter,
+"sort_by":    sortBy,
+"sort_order": sortOrder,
+},
+},
+})
+}
+
+// GetMyStatistics - FR-011: Student view own statistics
+func (s *AchievementService) GetMyStatistics(c *fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return c.Status(401).JSON(fiber.Map{
 			"status":  "error",
-			"message": "Gagal mengambil data achievement references",
+			"message": "Unauthorized",
 		})
 	}
 
-	// Check if no data
-	if len(references) == 0 {
+	ctx := context.Background()
+
+	// Get statistics dari MongoDB
+	stats, err := s.achievementRepo.GetStatisticsByStudentIDs(ctx, []string{userID})
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Gagal mengambil statistik",
+		})
+	}
+
+	// Build response
+	response := buildStatisticsResponse(stats, false)
+
+	return c.Status(200).JSON(fiber.Map{
+		"status":  "success",
+		"message": "Statistik berhasil diambil",
+		"data":    response,
+	})
+}
+
+// GetAdviseeStatistics - FR-011: Lecturer view advisee statistics
+func (s *AchievementService) GetAdviseeStatistics(c *fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return c.Status(401).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Unauthorized",
+		})
+	}
+
+	ctx := context.Background()
+
+	// Get student IDs dari advisees
+	studentIDs, err := s.studentRepo.FindStudentIDsByAdvisorID(userID)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Gagal mengambil data mahasiswa bimbingan",
+		})
+	}
+
+	if len(studentIDs) == 0 {
 		return c.Status(200).JSON(fiber.Map{
 			"status":  "success",
-			"message": "Data achievements berhasil diambil",
-			"data": fiber.Map{
-				"achievements": []models.Achievement{},
-				"pagination": fiber.Map{
-					"page":        page,
-					"limit":       limit,
-					"total_items": total,
-					"total_pages": 0,
-				},
-			},
+			"message": "Tidak ada mahasiswa bimbingan",
+			"data":    buildEmptyStatistics(true),
 		})
 	}
 
-	// Step 2: Extract achievement IDs untuk fetch dari MongoDB
-	achievementIDs := make([]string, len(references))
-	for i, ref := range references {
-		achievementIDs[i] = ref.MongoAchievementID
-	}
-
-	// Step 3: Fetch details dari MongoDB
-	ctx := context.Background()
-	achievements, err := s.achievementRepo.FindByAchievementIDs(ctx, achievementIDs)
+	// Get statistics dari MongoDB
+	stats, err := s.achievementRepo.GetStatisticsByStudentIDs(ctx, studentIDs)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{
 			"status":  "error",
-			"message": "Gagal mengambil detail achievements dari MongoDB",
+			"message": "Gagal mengambil statistik",
 		})
 	}
 
-	// Calculate total pages
-	totalPages := int(total) / limit
-	if int(total)%limit > 0 {
-		totalPages++
+	// Get top students
+	topStudents, err := s.referenceRepo.GetTopStudents(studentIDs, 10)
+	if err != nil {
+		topStudents = []models.TopStudent{}
 	}
 
-	// Step 4: Return dengan pagination
+	// Build response
+	response := buildStatisticsResponse(stats, true)
+
+	// Convert topStudents to fiber.Map
+	topStudentsMap := []fiber.Map{}
+	for _, student := range topStudents {
+		topStudentsMap = append(topStudentsMap, fiber.Map{
+			"student_id":            student.StudentID,
+			"student_name":          student.StudentName,
+			"total_achievements":    student.TotalAchievements,
+			"verified_achievements": student.VerifiedAchievements,
+		})
+	}
+	response["top_students"] = topStudentsMap
+
+	return c.Status(200).JSON(fiber.Map{
+		"status":  "success",
+		"message": "Statistik mahasiswa bimbingan berhasil diambil",
+		"data":    response,
+	})
+}
+
+// GetAllStatistics - FR-011: Admin view all statistics
+func (s *AchievementService) GetAllStatistics(c *fiber.Ctx) error {
+	ctx := context.Background()
+
+	// Get all student IDs (we'll use empty filter to get all)
+	// For simplicity, we'll aggregate all achievements
+	filter := bson.M{"is_deleted": false}
+	achievements, err := s.achievementRepo.FindAll(ctx, filter)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Gagal mengambil data achievements",
+		})
+	}
+
+	// Calculate statistics manually
+	stats := calculateStatisticsFromAchievements(achievements)
+
+	// Get top students (all students)
+	topStudents, err := s.referenceRepo.GetAllTopStudents(10)
+	if err != nil {
+		topStudents = []models.TopStudent{}
+	}
+
+	// Build response
+	response := buildStatisticsResponse(stats, true)
+
+	// Convert topStudents to fiber.Map
+	topStudentsMap := []fiber.Map{}
+	for _, student := range topStudents {
+		topStudentsMap = append(topStudentsMap, fiber.Map{
+			"student_id":            student.StudentID,
+			"student_name":          student.StudentName,
+			"total_achievements":    student.TotalAchievements,
+			"verified_achievements": student.VerifiedAchievements,
+		})
+	}
+	response["top_students"] = topStudentsMap
+
+	return c.Status(200).JSON(fiber.Map{
+		"status":  "success",
+		"message": "Statistik semua prestasi berhasil diambil",
+		"data":    response,
+	})
+}
+
+// Helper function to build statistics response
+func buildStatisticsResponse(stats map[string]interface{}, includeTopStudents bool) fiber.Map {
+	totalAchievements := stats["total_achievements"].(int)
+
+	// Summary
+	summary := fiber.Map{
+		"total_achievements": totalAchievements,
+		"total_verified":     stats["total_verified"].(int),
+		"total_pending":      stats["total_pending"].(int),
+		"total_rejected":     stats["total_rejected"].(int),
+		"total_draft":        stats["total_draft"].(int),
+	}
+
+	// By Category
+	categoryCount := stats["category_count"].(map[string]int)
+	byCategory := []fiber.Map{}
+	for category, count := range categoryCount {
+		percentage := 0.0
+		if totalAchievements > 0 {
+			percentage = float64(count) / float64(totalAchievements) * 100
+		}
+		byCategory = append(byCategory, fiber.Map{
+			"category":   category,
+			"count":      count,
+			"percentage": percentage,
+		})
+	}
+
+	// By Level
+	levelCount := stats["level_count"].(map[string]int)
+	byLevel := []fiber.Map{}
+	for level, count := range levelCount {
+		percentage := 0.0
+		if totalAchievements > 0 {
+			percentage = float64(count) / float64(totalAchievements) * 100
+		}
+		byLevel = append(byLevel, fiber.Map{
+			"level":      level,
+			"count":      count,
+			"percentage": percentage,
+		})
+	}
+
+	// By Period
+	periodCount := stats["period_count"].(map[string]int)
+	byPeriod := []fiber.Map{}
+	for period, count := range periodCount {
+		// Parse year-month
+		var year, month int
+		fmt.Sscanf(period, "%d-%d", &year, &month)
+		byPeriod = append(byPeriod, fiber.Map{
+			"year":  year,
+			"month": month,
+			"count": count,
+		})
+	}
+
+	response := fiber.Map{
+		"summary":     summary,
+		"by_category": byCategory,
+		"by_level":    byLevel,
+		"by_period":   byPeriod,
+	}
+
+	if includeTopStudents {
+		response["top_students"] = []fiber.Map{}
+	}
+
+	return response
+}
+
+// Helper function to build empty statistics
+func buildEmptyStatistics(includeTopStudents bool) fiber.Map {
+	response := fiber.Map{
+		"summary": fiber.Map{
+			"total_achievements": 0,
+			"total_verified":     0,
+			"total_pending":      0,
+			"total_rejected":     0,
+			"total_draft":        0,
+		},
+		"by_category": []fiber.Map{},
+		"by_level":    []fiber.Map{},
+		"by_period":   []fiber.Map{},
+	}
+
+	if includeTopStudents {
+		response["top_students"] = []fiber.Map{}
+	}
+
+	return response
+}
+
+// Helper function to calculate statistics from achievements
+func calculateStatisticsFromAchievements(achievements []models.Achievement) map[string]interface{} {
+	stats := make(map[string]interface{})
+
+	totalAchievements := len(achievements)
+	totalVerified := 0
+	totalPending := 0
+	totalRejected := 0
+	totalDraft := 0
+
+	categoryCount := make(map[string]int)
+	levelCount := make(map[string]int)
+	periodCount := make(map[string]int)
+
+	for _, achievement := range achievements {
+		switch achievement.Status {
+		case "verified":
+			totalVerified++
+		case "submitted":
+			totalPending++
+		case "rejected":
+			totalRejected++
+		case "draft":
+			totalDraft++
+		}
+
+		if achievement.Category != "" {
+			categoryCount[achievement.Category]++
+		}
+
+		if achievement.Level != "" {
+			levelCount[achievement.Level]++
+		}
+
+		yearMonth := achievement.Date.Format("2006-01")
+		periodCount[yearMonth]++
+	}
+
+	stats["total_achievements"] = totalAchievements
+	stats["total_verified"] = totalVerified
+	stats["total_pending"] = totalPending
+	stats["total_rejected"] = totalRejected
+	stats["total_draft"] = totalDraft
+	stats["category_count"] = categoryCount
+	stats["level_count"] = levelCount
+	stats["period_count"] = periodCount
+
+	return stats
+}
+
+// GetAchievementHistory - Get status history of an achievement
+func (s *AchievementService) GetAchievementHistory(c *fiber.Ctx) error {
+	achievementID := c.Params("id")
+	userID, _ := c.Locals("user_id").(string)
+
+	ctx := context.Background()
+
+	// Get achievement
+	achievement, err := s.achievementRepo.FindByID(ctx, achievementID)
+	if err != nil {
+		return c.Status(404).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Achievement tidak ditemukan",
+		})
+	}
+
+	// Check access (owner or admin/lecturer)
+	roleID, _ := c.Locals("role_id").(string)
+	if achievement.StudentID != userID && roleID != "1" && roleID != "2" {
+		return c.Status(403).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Anda tidak memiliki akses ke achievement ini",
+		})
+	}
+
+	// Get reference for history
+	reference, err := s.referenceRepo.FindByMongoID(achievementID)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Gagal mengambil history",
+		})
+	}
+
+	// Build history timeline
+	history := []fiber.Map{
+		{
+			"status":    "draft",
+			"timestamp": achievement.CreatedAt,
+			"note":      "Achievement created",
+		},
+	}
+
+	if reference.SubmittedAt != nil {
+		history = append(history, fiber.Map{
+			"status":    "submitted",
+			"timestamp": *reference.SubmittedAt,
+			"note":      "Submitted for verification",
+		})
+	}
+
+	if reference.VerifiedAt != nil && reference.VerifiedBy != nil {
+		history = append(history, fiber.Map{
+			"status":      "verified",
+			"timestamp":   *reference.VerifiedAt,
+			"verified_by": *reference.VerifiedBy,
+			"note":        "Achievement verified",
+		})
+	}
+
+	if reference.Status == "rejected" && reference.RejectionNote != nil {
+		history = append(history, fiber.Map{
+			"status":         "rejected",
+			"timestamp":      reference.UpdatedAt,
+			"rejection_note": *reference.RejectionNote,
+			"note":           "Achievement rejected",
+		})
+	}
+
+	return c.Status(200).JSON(fiber.Map{
+		"status":  "success",
+		"message": "History berhasil diambil",
+		"data": fiber.Map{
+			"achievement_id": achievementID,
+			"current_status": achievement.Status,
+			"history":        history,
+		},
+	})
+}
+
+// UploadAttachment - Upload additional attachment to achievement
+func (s *AchievementService) UploadAttachment(c *fiber.Ctx) error {
+	achievementID := c.Params("id")
+	userID, _ := c.Locals("user_id").(string)
+
+	ctx := context.Background()
+
+	// Get achievement
+	achievement, err := s.achievementRepo.FindByID(ctx, achievementID)
+	if err != nil {
+		return c.Status(404).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Achievement tidak ditemukan",
+		})
+	}
+
+	// Check ownership
+	if achievement.StudentID != userID {
+		return c.Status(403).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Anda tidak memiliki akses ke achievement ini",
+		})
+	}
+
+	// Check status (only draft can add attachments)
+	if achievement.Status != "draft" {
+		return c.Status(400).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Hanya achievement dengan status 'draft' yang bisa menambah attachment",
+		})
+	}
+
+	// Handle file upload
+	form, err := c.MultipartForm()
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Invalid form data",
+		})
+	}
+
+	files := form.File["attachments"]
+	if len(files) == 0 {
+		return c.Status(400).JSON(fiber.Map{
+			"status":  "error",
+			"message": "No files uploaded",
+		})
+	}
+
+	var newDocuments []models.Document
+	for _, file := range files {
+		// Save file
+		filepath, err := utils.SaveUploadedFile(file, s.uploadConfig)
+		if err != nil {
+			// Rollback uploaded files
+			for _, doc := range newDocuments {
+				utils.DeleteFile(doc.Filepath)
+			}
+			return c.Status(400).JSON(fiber.Map{
+				"status":  "error",
+				"message": fmt.Sprintf("Gagal upload file: %v", err),
+			})
+		}
+
+		// Add to documents
+		newDocuments = append(newDocuments, models.Document{
+			Filename:   file.Filename,
+			Filepath:   filepath,
+			Filesize:   file.Size,
+			Mimetype:   file.Header.Get("Content-Type"),
+			UploadedAt: time.Now(),
+		})
+	}
+
+	// Append to existing documents
+	achievement.Documents = append(achievement.Documents, newDocuments...)
+	achievement.UpdatedAt = time.Now()
+
+	// Update in MongoDB
+	if err := s.achievementRepo.Update(ctx, achievementID, achievement); err != nil {
+		// Rollback uploaded files
+		for _, doc := range newDocuments {
+			utils.DeleteFile(doc.Filepath)
+		}
+		return c.Status(500).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Gagal mengupdate achievement",
+		})
+	}
+
+	return c.Status(200).JSON(fiber.Map{
+		"status":  "success",
+		"message": "Attachment berhasil diupload",
+		"data": fiber.Map{
+			"achievement_id":  achievementID,
+			"new_documents":   newDocuments,
+			"total_documents": len(achievement.Documents),
+		},
+	})
+}
+
+// GetStudentAchievements - Get achievements for a specific student
+func (s *AchievementService) GetStudentAchievements(c *fiber.Ctx) error {
+	studentID := c.Params("id")
+
+	// Check access
+	userID, _ := c.Locals("user_id").(string)
+	roleID, _ := c.Locals("role_id").(string)
+
+	// Only admin, lecturer, or the student themselves can view
+	if userID != studentID && roleID != "1" && roleID != "2" {
+		return c.Status(403).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Anda tidak memiliki akses ke data ini",
+		})
+	}
+
+	ctx := context.Background()
+	achievements, err := s.achievementRepo.FindByStudentID(ctx, studentID)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Gagal mengambil data achievements",
+		})
+	}
+
 	return c.Status(200).JSON(fiber.Map{
 		"status":  "success",
 		"message": "Data achievements berhasil diambil",
 		"data": fiber.Map{
+			"student_id":   studentID,
 			"achievements": achievements,
-			"pagination": fiber.Map{
-				"page":        page,
-				"limit":       limit,
-				"total_items": total,
-				"total_pages": totalPages,
-			},
-			"filters": fiber.Map{
-				"status":     statusFilter,
-				"student_id": studentIDFilter,
-				"sort_by":    sortBy,
-				"sort_order": sortOrder,
-			},
+			"total":        len(achievements),
+		},
+	})
+}
+
+// GetStudentReport - Get detailed report for a specific student
+func (s *AchievementService) GetStudentReport(c *fiber.Ctx) error {
+	studentID := c.Params("id")
+
+	// Check access
+	userID, _ := c.Locals("user_id").(string)
+	roleID, _ := c.Locals("role_id").(string)
+
+	// Only admin, lecturer, or the student themselves can view
+	if userID != studentID && roleID != "1" && roleID != "2" {
+		return c.Status(403).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Anda tidak memiliki akses ke data ini",
+		})
+	}
+
+	ctx := context.Background()
+
+	// Get student info
+	student, err := s.studentRepo.FindByUserID(studentID)
+	if err != nil {
+		return c.Status(404).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Student tidak ditemukan",
+		})
+	}
+
+	// Get achievements
+	achievements, err := s.achievementRepo.FindByStudentID(ctx, studentID)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Gagal mengambil data achievements",
+		})
+	}
+
+	// Calculate statistics
+	stats := calculateStatisticsFromAchievements(achievements)
+
+	return c.Status(200).JSON(fiber.Map{
+		"status":  "success",
+		"message": "Report berhasil diambil",
+		"data": fiber.Map{
+			"student":      student,
+			"statistics":   buildStatisticsResponse(stats, false),
+			"achievements": achievements,
 		},
 	})
 }
