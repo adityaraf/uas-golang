@@ -1,3 +1,23 @@
+// @title Alumni Management System API
+// @version 1.0
+// @description API untuk sistem manajemen alumni dengan fitur RBAC dan achievement management
+// @termsOfService http://swagger.io/terms/
+
+// @contact.name API Support
+// @contact.url http://www.swagger.io/support
+// @contact.email support@swagger.io
+
+// @license.name MIT
+// @license.url https://opensource.org/licenses/MIT
+
+// @host localhost:3000
+// @BasePath /api/v1
+
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Type "Bearer" followed by a space and JWT token.
+
 package main
 
 import (
@@ -11,6 +31,10 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/joho/godotenv"
 	"golang.org/x/crypto/bcrypt"
+
+	_ "crud-app/docs" // Import generated docs
+
+	fiberSwagger "github.com/swaggo/fiber-swagger"
 )
 
 func main() {
@@ -39,6 +63,9 @@ func main() {
 
 	app := fiber.New()
 
+	// Swagger documentation
+	app.Get("/swagger/*", fiberSwagger.WrapHandler)
+
 	// Contoh hash password
 	password := "123456"
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
@@ -55,6 +82,9 @@ func main() {
 	if port == "" {
 		port = "3000"
 	}
+
+	log.Printf("🚀 Server running on http://localhost:%s", port)
+	log.Printf("📚 Swagger docs: http://localhost:%s/swagger/", port)
 
 	log.Fatal(app.Listen(":" + port))
 }

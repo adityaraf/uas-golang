@@ -1,0 +1,2276 @@
+basePath: /api/v1
+definitions:
+  models.Achievement:
+    properties:
+      achievement_id:
+        type: string
+      category:
+        type: string
+      created_at:
+        type: string
+      date:
+        type: string
+      deleted_at:
+        type: string
+      description:
+        type: string
+      documents:
+        items:
+          $ref: '#/definitions/models.Document'
+        type: array
+      id:
+        type: string
+      is_deleted:
+        type: boolean
+      level:
+        type: string
+      status:
+        type: string
+      student_id:
+        type: string
+      title:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  models.Document:
+    properties:
+      filename:
+        type: string
+      filepath:
+        type: string
+      filesize:
+        type: integer
+      mimetype:
+        type: string
+      uploaded_at:
+        type: string
+    type: object
+  models.Lecturer:
+    properties:
+      created_at:
+        type: string
+      department:
+        type: string
+      id:
+        type: string
+      lecturer_id:
+        type: string
+      user_id:
+        type: string
+    type: object
+  models.LoginRequest:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    type: object
+  models.LoginResponse:
+    properties:
+      data:
+        $ref: '#/definitions/models.UserProfile'
+      message:
+        type: string
+      status:
+        type: string
+    type: object
+  models.PaginationMeta:
+    properties:
+      limit:
+        type: integer
+      page:
+        type: integer
+      total_items:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
+  models.Student:
+    properties:
+      academic_year:
+        type: string
+      advisor_id:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      program_study:
+        type: string
+      student_id:
+        type: string
+      user_id:
+        type: string
+    type: object
+  models.SubmitAchievementRequest:
+    properties:
+      category:
+        type: string
+      date:
+        description: 'Format: YYYY-MM-DD'
+        type: string
+      description:
+        type: string
+      level:
+        type: string
+      title:
+        type: string
+    type: object
+  models.User:
+    properties:
+      created_at:
+        type: string
+      deleted_at:
+        type: string
+      email:
+        type: string
+      full_name:
+        type: string
+      id:
+        type: string
+      is_active:
+        type: boolean
+      role_id:
+        type: string
+      updated_at:
+        type: string
+      username:
+        type: string
+    type: object
+  models.UserProfile:
+    properties:
+      email:
+        type: string
+      full_name:
+        type: string
+      id:
+        type: string
+      role_name:
+        type: string
+      username:
+        type: string
+    type: object
+host: localhost:3000
+info:
+  contact:
+    email: support@swagger.io
+    name: API Support
+    url: http://www.swagger.io/support
+  description: API untuk sistem manajemen alumni dengan fitur RBAC dan achievement
+    management
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  termsOfService: http://swagger.io/terms/
+  title: Alumni Management System API
+  version: "1.0"
+paths:
+  /achievements:
+    get:
+      consumes:
+      - application/json
+      description: Get all achievements belonging to the authenticated user (all statuses
+        included).
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Achievements retrieved successfully
+          schema:
+            properties:
+              data:
+                items:
+                  $ref: '#/definitions/models.Achievement'
+                type: array
+              message:
+                type: string
+              status:
+                type: string
+            type: object
+        "401":
+          description: Unauthorized - invalid or missing JWT token
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Insufficient permissions (requires achievements.read)
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Failed to retrieve achievements from database
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get my achievements
+      tags:
+      - Achievements
+    post:
+      consumes:
+      - multipart/form-data
+      description: Student submits a new achievement with supporting documents. Uses
+        hybrid database storage (MongoDB + PostgreSQL).
+      parameters:
+      - description: Achievement title
+        in: formData
+        name: title
+        required: true
+        type: string
+      - description: Achievement category (e.g., Academic Competition, Research, etc.)
+        in: formData
+        name: category
+        required: true
+        type: string
+      - description: Achievement level (Local/Regional/National/International)
+        in: formData
+        name: level
+        required: true
+        type: string
+      - description: Achievement date (YYYY-MM-DD format)
+        in: formData
+        name: date
+        required: true
+        type: string
+      - description: Detailed achievement description
+        in: formData
+        name: description
+        type: string
+      - description: Supporting documents (certificates, photos, etc. - multiple files
+          allowed)
+        in: formData
+        name: documents
+        type: file
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Achievement created successfully with draft status
+          schema:
+            properties:
+              data:
+                $ref: '#/definitions/models.Achievement'
+              message:
+                type: string
+              status:
+                type: string
+            type: object
+        "400":
+          description: Invalid request, missing required fields, or file upload error
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized - invalid or missing JWT token
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Insufficient permissions (requires achievements.create)
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error - database or file system error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Submit new achievement
+      tags:
+      - Achievements
+  /achievements/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Soft delete an achievement (only if status is draft). Validates
+        ownership and status before deletion.
+      parameters:
+      - description: Achievement ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Achievement deleted successfully
+          schema:
+            properties:
+              message:
+                type: string
+              status:
+                type: string
+            type: object
+        "400":
+          description: Achievement cannot be deleted (not draft status)
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized - invalid or missing JWT token
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Access denied - not owner or insufficient permissions
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Achievement not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Delete operation failed
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete achievement
+      tags:
+      - Achievements
+    get:
+      consumes:
+      - application/json
+      description: Get detailed information about a specific achievement with access
+        control (owner, admin, or lecturer only).
+      parameters:
+      - description: Achievement ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Achievement retrieved successfully
+          schema:
+            properties:
+              data:
+                $ref: '#/definitions/models.Achievement'
+              message:
+                type: string
+              status:
+                type: string
+            type: object
+        "401":
+          description: Unauthorized - invalid or missing JWT token
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Access denied - not owner, admin, or lecturer
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Achievement not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Failed to retrieve achievement data
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get achievement by ID
+      tags:
+      - Achievements
+    put:
+      consumes:
+      - application/json
+      description: Update achievement information (only if status is draft). Validates
+        ownership and status before updating.
+      parameters:
+      - description: Achievement ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Achievement update request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.SubmitAchievementRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Achievement updated successfully
+          schema:
+            properties:
+              data:
+                $ref: '#/definitions/models.Achievement'
+              message:
+                type: string
+              status:
+                type: string
+            type: object
+        "400":
+          description: Invalid request or achievement cannot be updated (not draft
+            status)
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized - invalid or missing JWT token
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Access denied - not owner or insufficient permissions
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Achievement not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Update operation failed
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update achievement
+      tags:
+      - Achievements
+  /achievements/{id}/attachments:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Upload additional files to a draft achievement. Validates file
+        types and handles rollback on errors.
+      parameters:
+      - description: Achievement ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Additional attachment files (multiple files allowed)
+        in: formData
+        name: attachments
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Attachments uploaded successfully
+          schema:
+            properties:
+              data:
+                properties:
+                  achievement_id:
+                    type: string
+                  new_documents:
+                    items:
+                      $ref: '#/definitions/models.Document'
+                    type: array
+                  total_documents:
+                    type: integer
+                type: object
+              message:
+                type: string
+              status:
+                type: string
+            type: object
+        "400":
+          description: Invalid request, no files, or upload error
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized - invalid or missing JWT token
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Access denied or achievement not in draft status
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Achievement not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Upload operation failed
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Upload additional attachments
+      tags:
+      - Achievements
+  /achievements/{id}/history:
+    get:
+      consumes:
+      - application/json
+      description: Get status change history of an achievement including timestamps
+        and verification/rejection details.
+      parameters:
+      - description: Achievement ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: History retrieved successfully
+          schema:
+            properties:
+              data:
+                properties:
+                  achievement_id:
+                    type: string
+                  current_status:
+                    type: string
+                  history:
+                    items:
+                      type: object
+                    type: array
+                type: object
+              message:
+                type: string
+              status:
+                type: string
+            type: object
+        "401":
+          description: Unauthorized - invalid or missing JWT token
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Access denied - not owner, admin, or lecturer
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Achievement not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Failed to retrieve history data
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get achievement history
+      tags:
+      - Achievements
+  /achievements/{id}/reject:
+    post:
+      consumes:
+      - application/json
+      description: Lecturer rejects a submitted achievement with reason. Changes status
+        from 'submitted' to 'rejected'.
+      parameters:
+      - description: Achievement ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Rejection request with reason
+        in: body
+        name: request
+        required: true
+        schema:
+          properties:
+            rejection_note:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Achievement rejected successfully
+          schema:
+            properties:
+              data:
+                properties:
+                  achievement:
+                    $ref: '#/definitions/models.Achievement'
+                  reference:
+                    type: object
+                type: object
+              message:
+                type: string
+              status:
+                type: string
+            type: object
+        "400":
+          description: Invalid request, missing rejection note, or achievement cannot
+            be rejected
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized - invalid or missing JWT token
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Insufficient permissions (requires achievements.verify)
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Achievement not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Rejection process failed - database error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Reject achievement
+      tags:
+      - Achievements
+  /achievements/{id}/review:
+    get:
+      consumes:
+      - application/json
+      description: Lecturer reviews detailed information of an achievement for verification
+        process.
+      parameters:
+      - description: Achievement ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Achievement details retrieved successfully
+          schema:
+            properties:
+              data:
+                properties:
+                  achievement:
+                    $ref: '#/definitions/models.Achievement'
+                  reference:
+                    type: object
+                type: object
+              message:
+                type: string
+              status:
+                type: string
+            type: object
+        "401":
+          description: Unauthorized - invalid or missing JWT token
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Insufficient permissions (requires achievements.verify)
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Achievement not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Failed to retrieve achievement details
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Review achievement detail
+      tags:
+      - Achievements
+  /achievements/{id}/submit:
+    post:
+      consumes:
+      - application/json
+      description: Submit a draft achievement for verification by lecturer. Changes
+        status from 'draft' to 'submitted'.
+      parameters:
+      - description: Achievement ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Achievement submitted successfully
+          schema:
+            properties:
+              data:
+                properties:
+                  achievement_id:
+                    type: string
+                  status:
+                    type: string
+                  updated_at:
+                    type: string
+                type: object
+              message:
+                type: string
+              status:
+                type: string
+            type: object
+        "400":
+          description: Achievement cannot be submitted (not draft status)
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized - invalid or missing JWT token
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Access denied - not owner or insufficient permissions
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Achievement not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Submission process failed - database error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Submit achievement for verification
+      tags:
+      - Achievements
+  /achievements/{id}/verify:
+    post:
+      consumes:
+      - application/json
+      description: Lecturer approves a submitted achievement. Changes status from
+        'submitted' to 'verified'.
+      parameters:
+      - description: Achievement ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Achievement approved successfully
+          schema:
+            properties:
+              data:
+                properties:
+                  achievement:
+                    $ref: '#/definitions/models.Achievement'
+                  reference:
+                    type: object
+                type: object
+              message:
+                type: string
+              status:
+                type: string
+            type: object
+        "400":
+          description: Achievement cannot be approved (not submitted status)
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized - invalid or missing JWT token
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Insufficient permissions (requires achievements.verify)
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Achievement not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Verification process failed - database error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Approve achievement
+      tags:
+      - Achievements
+  /achievements/advisees:
+    get:
+      consumes:
+      - application/json
+      description: Lecturer gets paginated list of achievements from their advisees
+        (students under supervision).
+      parameters:
+      - default: 1
+        description: 'Page number (default: 1)'
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: 'Items per page (default: 10, max: 100)'
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Advisee achievements retrieved successfully
+          schema:
+            properties:
+              data:
+                properties:
+                  achievements:
+                    items:
+                      $ref: '#/definitions/models.Achievement'
+                    type: array
+                  pagination:
+                    $ref: '#/definitions/models.PaginationMeta'
+                type: object
+              message:
+                type: string
+              status:
+                type: string
+            type: object
+        "401":
+          description: Unauthorized - invalid or missing JWT token
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Insufficient permissions (requires lecturer access)
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Failed to retrieve achievements
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get advisee achievements
+      tags:
+      - Achievements
+  /achievements/all:
+    get:
+      consumes:
+      - application/json
+      description: Admin gets paginated list of all achievements with filtering and
+        sorting options.
+      parameters:
+      - default: 1
+        description: 'Page number (default: 1)'
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: 'Items per page (default: 10, max: 100)'
+        in: query
+        name: limit
+        type: integer
+      - description: Filter by status (draft, submitted, verified, rejected)
+        in: query
+        name: status
+        type: string
+      - description: Filter by student ID
+        in: query
+        name: student_id
+        type: string
+      - default: created_at
+        description: 'Sort by field (default: created_at)'
+        in: query
+        name: sort_by
+        type: string
+      - default: desc
+        description: Sort order (asc, desc)
+        in: query
+        name: sort_order
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: All achievements retrieved successfully
+          schema:
+            properties:
+              data:
+                properties:
+                  achievements:
+                    items:
+                      $ref: '#/definitions/models.Achievement'
+                    type: array
+                  filters:
+                    type: object
+                  pagination:
+                    type: object
+                type: object
+              message:
+                type: string
+              status:
+                type: string
+            type: object
+        "400":
+          description: Invalid filter parameters
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized - invalid or missing JWT token
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Insufficient permissions (requires admin access)
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Failed to retrieve achievements
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get all achievements (Admin)
+      tags:
+      - Achievements
+  /achievements/pending:
+    get:
+      consumes:
+      - application/json
+      description: Get paginated list of achievements that are pending verification
+        (submitted status).
+      parameters:
+      - default: 1
+        description: 'Page number (default: 1)'
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: 'Items per page (default: 10, max: 100)'
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Pending achievements retrieved successfully
+          schema:
+            properties:
+              data:
+                properties:
+                  achievements:
+                    items:
+                      $ref: '#/definitions/models.Achievement'
+                    type: array
+                  pagination:
+                    type: object
+                type: object
+              message:
+                type: string
+              status:
+                type: string
+            type: object
+        "401":
+          description: Unauthorized - invalid or missing JWT token
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Insufficient permissions (requires achievements.verify)
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Failed to retrieve pending achievements
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get pending verification achievements
+      tags:
+      - Achievements
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticate user with username/email and password. Returns JWT
+        token and user profile information.
+      parameters:
+      - description: Login credentials (username/email and password)
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Login successful - returns JWT token and user profile
+          schema:
+            $ref: '#/definitions/models.LoginResponse'
+        "400":
+          description: Invalid request body or missing required fields
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Invalid credentials (wrong username/email or password)
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Account inactive - contact administrator
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error - token generation failed
+          schema:
+            additionalProperties: true
+            type: object
+      summary: User login
+      tags:
+      - Authentication
+  /auth/logout:
+    post:
+      consumes:
+      - application/json
+      description: Logout user (client-side token removal). JWT tokens are stateless,
+        so logout is handled client-side.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Logout successful
+          schema:
+            properties:
+              message:
+                type: string
+              status:
+                type: string
+            type: object
+        "401":
+          description: Unauthorized - invalid or missing token
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: User logout
+      tags:
+      - Authentication
+  /auth/profile:
+    get:
+      consumes:
+      - application/json
+      description: Get profile information of the currently authenticated user including
+        role and status.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Profile retrieved successfully
+          schema:
+            properties:
+              data:
+                $ref: '#/definitions/models.UserProfile'
+              message:
+                type: string
+              status:
+                type: string
+            type: object
+        "401":
+          description: Unauthorized - invalid or missing token
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Failed to retrieve profile data
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get current user profile
+      tags:
+      - Authentication
+  /auth/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Generate new access token using refresh token. Validates refresh
+        token and user status.
+      parameters:
+      - description: Refresh token request
+        in: body
+        name: request
+        required: true
+        schema:
+          properties:
+            refresh_token:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Token refreshed successfully
+          schema:
+            properties:
+              data:
+                properties:
+                  token:
+                    type: string
+                type: object
+              message:
+                type: string
+              status:
+                type: string
+            type: object
+        "400":
+          description: Invalid request body or missing refresh token
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Invalid or expired refresh token
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: User account inactive
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Failed to generate new token
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Refresh JWT token
+      tags:
+      - Authentication
+  /lecturers:
+    get:
+      consumes:
+      - application/json
+      description: Get paginated list of lecturers with their profile information
+        and department details.
+      parameters:
+      - default: 1
+        description: 'Page number (default: 1)'
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: 'Items per page (default: 10, max: 100)'
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Lecturers retrieved successfully
+          schema:
+            properties:
+              data:
+                properties:
+                  lecturers:
+                    items:
+                      $ref: '#/definitions/models.Lecturer'
+                    type: array
+                  pagination:
+                    $ref: '#/definitions/models.PaginationMeta'
+                type: object
+              message:
+                type: string
+              status:
+                type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Insufficient permissions (requires lecturers.read)
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Failed to retrieve lecturers
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get list of lecturers
+      tags:
+      - Lecturer Management
+  /lecturers/{id}/advisees:
+    get:
+      consumes:
+      - application/json
+      description: Get list of students advised by a specific lecturer including their
+        profile information.
+      parameters:
+      - description: Lecturer ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Advisees retrieved successfully
+          schema:
+            properties:
+              data:
+                properties:
+                  advisees:
+                    items:
+                      $ref: '#/definitions/models.Student'
+                    type: array
+                  total:
+                    type: integer
+                type: object
+              message:
+                type: string
+              status:
+                type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Insufficient permissions (requires lecturers.read)
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Lecturer not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Failed to retrieve advisees
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get lecturer advisees
+      tags:
+      - Lecturer Management
+  /lecturers/{id}/profile:
+    put:
+      consumes:
+      - application/json
+      description: Update lecturer profile information including lecturer ID and department.
+      parameters:
+      - description: Lecturer ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Lecturer profile update request
+        in: body
+        name: request
+        required: true
+        schema:
+          properties:
+            department:
+              type: string
+            lecturer_id:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Lecturer profile updated successfully
+          schema:
+            properties:
+              message:
+                type: string
+              status:
+                type: string
+            type: object
+        "400":
+          description: Invalid request data
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Insufficient permissions
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Lecturer not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Update operation failed
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update lecturer profile
+      tags:
+      - Lecturer Management
+  /reports/statistics:
+    get:
+      consumes:
+      - application/json
+      description: Admin view of comprehensive achievement statistics across all students
+        including top performers ranking.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: All statistics retrieved successfully
+          schema:
+            properties:
+              data:
+                type: object
+              message:
+                type: string
+              status:
+                type: string
+            type: object
+        "401":
+          description: Unauthorized - invalid or missing JWT token
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Insufficient permissions (requires admin access)
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Failed to retrieve statistics from database
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get all achievement statistics
+      tags:
+      - Statistics & Reports
+  /reports/student/{id}:
+    get:
+      consumes:
+      - application/json
+      description: Get detailed achievement report for a specific student including
+        statistics and achievement list.
+      parameters:
+      - description: Student ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Student report retrieved successfully
+          schema:
+            properties:
+              data:
+                properties:
+                  achievements:
+                    items:
+                      $ref: '#/definitions/models.Achievement'
+                    type: array
+                  statistics:
+                    type: object
+                  student:
+                    $ref: '#/definitions/models.Student'
+                type: object
+              message:
+                type: string
+              status:
+                type: string
+            type: object
+        "401":
+          description: Unauthorized - invalid or missing JWT token
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Access denied - not owner, admin, or lecturer
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Student not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Failed to retrieve report data
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get student report
+      tags:
+      - Statistics & Reports
+  /students:
+    get:
+      consumes:
+      - application/json
+      description: Get paginated list of students with their profile information.
+      parameters:
+      - default: 1
+        description: 'Page number (default: 1)'
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: 'Items per page (default: 10, max: 100)'
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Students retrieved successfully
+          schema:
+            properties:
+              data:
+                properties:
+                  pagination:
+                    $ref: '#/definitions/models.PaginationMeta'
+                  students:
+                    items:
+                      $ref: '#/definitions/models.Student'
+                    type: array
+                type: object
+              message:
+                type: string
+              status:
+                type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Insufficient permissions (requires students.read)
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Failed to retrieve students
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get list of students
+      tags:
+      - Student Management
+  /students/{id}:
+    get:
+      consumes:
+      - application/json
+      description: Get detailed information about a specific student including user
+        data and profile.
+      parameters:
+      - description: Student ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Student retrieved successfully
+          schema:
+            properties:
+              data:
+                properties:
+                  student:
+                    $ref: '#/definitions/models.Student'
+                  user:
+                    $ref: '#/definitions/models.User'
+                type: object
+              message:
+                type: string
+              status:
+                type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Insufficient permissions (requires students.read)
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Student not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Failed to retrieve student data
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get student by ID
+      tags:
+      - Student Management
+  /students/{id}/achievements:
+    get:
+      consumes:
+      - application/json
+      description: 'Get all achievements for a specific student. Access control: admin,
+        lecturer, or the student themselves.'
+      parameters:
+      - description: Student ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Student achievements retrieved successfully
+          schema:
+            properties:
+              data:
+                properties:
+                  achievements:
+                    items:
+                      $ref: '#/definitions/models.Achievement'
+                    type: array
+                  student_id:
+                    type: string
+                  total:
+                    type: integer
+                type: object
+              message:
+                type: string
+              status:
+                type: string
+            type: object
+        "401":
+          description: Unauthorized - invalid or missing JWT token
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Access denied - insufficient permissions
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Failed to retrieve achievements
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get student achievements
+      tags:
+      - Student Management
+  /students/{id}/advisor:
+    put:
+      consumes:
+      - application/json
+      description: Assign a lecturer as advisor to a student. Validates that the advisor
+        is a valid lecturer.
+      parameters:
+      - description: Student ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Advisor assignment request with lecturer ID
+        in: body
+        name: request
+        required: true
+        schema:
+          properties:
+            advisor_id:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Advisor assigned successfully
+          schema:
+            properties:
+              message:
+                type: string
+              status:
+                type: string
+            type: object
+        "400":
+          description: Invalid request or advisor must be a lecturer
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Insufficient permissions (requires students.assign_advisor)
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Advisor assignment failed
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Assign advisor to student
+      tags:
+      - Student Management
+  /students/{id}/profile:
+    put:
+      consumes:
+      - application/json
+      description: Update student profile information including student ID, program
+        study, and academic year.
+      parameters:
+      - description: Student ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Student profile update request
+        in: body
+        name: request
+        required: true
+        schema:
+          properties:
+            academic_year:
+              type: string
+            program_study:
+              type: string
+            student_id:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Student profile updated successfully
+          schema:
+            properties:
+              message:
+                type: string
+              status:
+                type: string
+            type: object
+        "400":
+          description: Invalid request data
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Insufficient permissions
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Student not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Update operation failed
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update student profile
+      tags:
+      - Student Management
+  /users:
+    get:
+      consumes:
+      - application/json
+      description: Get paginated list of users with optional role filtering. Admin
+        access required.
+      parameters:
+      - default: 1
+        description: 'Page number (default: 1)'
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: 'Items per page (default: 10, max: 100)'
+        in: query
+        name: limit
+        type: integer
+      - description: Filter by role ID (1=Admin, 2=Lecturer, 3=Student)
+        in: query
+        name: role_id
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Users retrieved successfully
+          schema:
+            properties:
+              data:
+                properties:
+                  pagination:
+                    $ref: '#/definitions/models.PaginationMeta'
+                  users:
+                    items:
+                      $ref: '#/definitions/models.User'
+                    type: array
+                type: object
+              message:
+                type: string
+              status:
+                type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Insufficient permissions (requires users.read)
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Failed to retrieve users
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get list of users
+      tags:
+      - User Management
+    post:
+      consumes:
+      - application/json
+      description: Create a new user with role assignment and optional student/lecturer
+        profile. Generates random password.
+      parameters:
+      - description: User creation request
+        in: body
+        name: request
+        required: true
+        schema:
+          properties:
+            academic_year:
+              type: string
+            department:
+              type: string
+            email:
+              type: string
+            full_name:
+              type: string
+            is_active:
+              type: boolean
+            lecturer_id:
+              type: string
+            program_study:
+              type: string
+            role_id:
+              type: string
+            student_id:
+              type: string
+            username:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: User created successfully with generated password
+          schema:
+            properties:
+              data:
+                properties:
+                  email:
+                    type: string
+                  password:
+                    type: string
+                  role_id:
+                    type: string
+                  user_id:
+                    type: string
+                  username:
+                    type: string
+                type: object
+              message:
+                type: string
+              status:
+                type: string
+            type: object
+        "400":
+          description: Invalid request, validation error, or duplicate username/email
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Insufficient permissions (requires users.create)
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error - user or profile creation failed
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create new user
+      tags:
+      - User Management
+  /users/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Soft delete a user. User data is marked as deleted but not physically
+        removed.
+      parameters:
+      - description: User ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: User deleted successfully
+          schema:
+            properties:
+              message:
+                type: string
+              status:
+                type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Insufficient permissions (requires users.delete)
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: User not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Delete operation failed
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete user
+      tags:
+      - User Management
+    get:
+      consumes:
+      - application/json
+      description: Get detailed information about a specific user including role-based
+        profile (Student/Lecturer).
+      parameters:
+      - description: User ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: User retrieved successfully with profile
+          schema:
+            properties:
+              data:
+                properties:
+                  profile:
+                    type: object
+                  user:
+                    $ref: '#/definitions/models.User'
+                type: object
+              message:
+                type: string
+              status:
+                type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Insufficient permissions (requires users.read)
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: User not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Failed to retrieve user data
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get user by ID
+      tags:
+      - User Management
+    put:
+      consumes:
+      - application/json
+      description: Update user information including role change and account activation/deactivation.
+      parameters:
+      - description: User ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: User update request
+        in: body
+        name: request
+        required: true
+        schema:
+          properties:
+            email:
+              type: string
+            full_name:
+              type: string
+            is_active:
+              type: boolean
+            role_id:
+              type: string
+            username:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: User updated successfully
+          schema:
+            properties:
+              data:
+                $ref: '#/definitions/models.User'
+              message:
+                type: string
+              status:
+                type: string
+            type: object
+        "400":
+          description: Invalid request data
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Insufficient permissions (requires users.update)
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: User not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Update operation failed
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update user
+      tags:
+      - User Management
+  /users/{id}/lecturer-profile:
+    post:
+      consumes:
+      - application/json
+      description: Create lecturer profile for a user. Validates that profile doesn't
+        already exist.
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Lecturer profile creation request
+        in: body
+        name: request
+        required: true
+        schema:
+          properties:
+            department:
+              type: string
+            lecturer_id:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Lecturer profile created successfully
+          schema:
+            properties:
+              data:
+                $ref: '#/definitions/models.Lecturer'
+              message:
+                type: string
+              status:
+                type: string
+            type: object
+        "400":
+          description: Invalid request or profile already exists
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Insufficient permissions
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Profile creation failed
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Set lecturer profile
+      tags:
+      - Lecturer Management
+  /users/{id}/role:
+    put:
+      consumes:
+      - application/json
+      description: Assign a specific role to a user. Validates role existence before
+        assignment.
+      parameters:
+      - description: User ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Role assignment request (1=Admin, 2=Lecturer, 3=Student)
+        in: body
+        name: request
+        required: true
+        schema:
+          properties:
+            role_id:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Role assigned successfully
+          schema:
+            properties:
+              message:
+                type: string
+              status:
+                type: string
+            type: object
+        "400":
+          description: Invalid role ID or role not found
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Insufficient permissions (requires users.assign_role)
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Role assignment failed
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Assign role to user
+      tags:
+      - User Management
+  /users/{id}/student-profile:
+    post:
+      consumes:
+      - application/json
+      description: Create student profile for a user. Validates that profile doesn't
+        already exist.
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Student profile creation request
+        in: body
+        name: request
+        required: true
+        schema:
+          properties:
+            academic_year:
+              type: string
+            program_study:
+              type: string
+            student_id:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Student profile created successfully
+          schema:
+            properties:
+              data:
+                $ref: '#/definitions/models.Student'
+              message:
+                type: string
+              status:
+                type: string
+            type: object
+        "400":
+          description: Invalid request or profile already exists
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Insufficient permissions
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Profile creation failed
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Set student profile
+      tags:
+      - Student Management
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
