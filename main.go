@@ -30,7 +30,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/joho/godotenv"
 
-	_ "crud-app/docs" // Import generated docs
+	_ "crud-app/app/docs" // Import generated docs
 
 	fiberSwagger "github.com/swaggo/fiber-swagger"
 )
